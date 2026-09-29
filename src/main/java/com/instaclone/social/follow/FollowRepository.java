@@ -1,0 +1,74 @@
+package com.instaclone.social.follow;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+public interface FollowRepository extends JpaRepository<Follow, Long> {
+
+    Optional<Follow> findByFollowerIdAndFolloweeId(Long followerId, Long followeeId);
+
+    boolean existsByFollowerIdAndFolloweeIdAndStatus(Long followerId, Long followeeId, FollowStatus status);
+
+    long countByFolloweeIdAndStatus(Long followeeId, FollowStatus status);
+
+    long countByFollowerIdAndStatus(Long followerId, FollowStatus status);
+
+    @Query(
+            value = "SELECT followee_id FROM follows WHERE follower_id = :followerId AND status = 'ACCEPTED'",
+            nativeQuery = true)
+    List<Long> findAcceptedFolloweeIds(@Param("followerId") Long followerId);
+
+    @Query(
+            value =
+                    "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "
+                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl "
+                            + "FROM follows f JOIN users u ON u.id = f.follower_id "
+                            + "WHERE f.followee_id = :userId AND f.status = 'ACCEPTED' "
+                            + "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit",
+            nativeQuery = true)
+    List<FollowUserRow> findFirstPageFollowers(@Param("userId") Long userId, @Param("limit") int limit);
+
+    @Query(
+            value =
+                    "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "
+                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl "
+                            + "FROM follows f JOIN users u ON u.id = f.follower_id "
+                            + "WHERE f.followee_id = :userId AND f.status = 'ACCEPTED' "
+                            + "AND (f.created_at, f.id) < (:cursorCreatedAt, :cursorId) "
+                            + "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit",
+            nativeQuery = true)
+    List<FollowUserRow> findPageFollowersAfterCursor(
+            @Param("userId") Long userId,
+            @Param("cursorCreatedAt") Instant cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            @Param("limit") int limit);
+
+    @Query(
+            value =
+                    "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "
+                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl "
+                            + "FROM follows f JOIN users u ON u.id = f.followee_id "
+                            + "WHERE f.follower_id = :userId AND f.status = 'ACCEPTED' "
+                            + "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit",
+            nativeQuery = true)
+    List<FollowUserRow> findFirstPageFollowing(@Param("userId") Long userId, @Param("limit") int limit);
+
+    @Query(
+            value =
+                    "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "
+                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl "
+                            + "FROM follows f JOIN users u ON u.id = f.followee_id "
+                            + "WHERE f.follower_id = :userId AND f.status = 'ACCEPTED' "
+                            + "AND (f.created_at, f.id) < (:cursorCreatedAt, :cursorId) "
+                            + "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit",
+            nativeQuery = true)
+    List<FollowUserRow> findPageFollowingAfterCursor(
+            @Param("userId") Long userId,
+            @Param("cursorCreatedAt") Instant cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            @Param("limit") int limit);
+}

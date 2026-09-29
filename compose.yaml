@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: 'postgres:16-alpine'
+    environment:
+      - 'POSTGRES_DB=instaclone'
+      - 'POSTGRES_USER=instaclone'
+      - 'POSTGRES_PASSWORD=instaclone'
+    ports:
+      # Host port 5433, not 5432 — this machine already has a native Postgres bound to 5432.
+      - '5433:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U instaclone']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: 'redis:7-alpine'
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # S3-compatible storage for local dev, standing in for Cloudflare R2. (MinIO's and LocalStack's
+  # free Docker images both now require a paid license to pull/run, so this uses SeaweedFS's S3
+  # gateway instead — genuinely free, and accepts any access/secret key by default.)
+  seaweedfs:
+    image: 'chrislusf/seaweedfs:latest'
+    command: 'server -dir=/data -s3 -s3.port=8333'
+    ports:
+      - '8333:8333'
+    volumes:
+      - 'seaweedfs-data:/data'
+
+volumes:
+  seaweedfs-data:

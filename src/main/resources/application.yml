@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: insta-clone
+  docker:
+    compose:
+      lifecycle-management: start-and-stop
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
+app:
+  jwt:
+    access-token-ttl: PT15M
+    refresh-token-ttl: P30D
+    # Local dev runs over plain HTTP; flip to true once deployed behind Cloudflare/Let's Encrypt TLS (Phase 5).
+    cookie-secure: false
+  storage:
+    endpoint: http://localhost:8333
+    region: us-east-1
+    access-key: local
+    secret-key: local
+    bucket: instaclone-media
+    public-base-url: http://localhost:8333/instaclone-media
+    auto-create-bucket: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
