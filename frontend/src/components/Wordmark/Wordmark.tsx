@@ -1,9 +1,9 @@
 import styles from './Wordmark.module.css'
 
 /**
- * The project's own script-style wordmark — deliberately not Instagram's actual logotype/font
- * (see the Phase 5 plan's trademark note): same visual register (a casual script mark used as a
- * home link), original brand name.
+ * Set in Yellowtail, an open-licensed script font matching the casual brush-script register of
+ * Instagram's original 2010 "Billabong" logotype — not Billabong itself, which needs a paid
+ * commercial license from its foundry. Original brand name, borrowed typeface style only.
  */
 export function Wordmark({ className }: { className?: string }) {
   return (
