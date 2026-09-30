@@ -11,6 +11,9 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     long countByUserId(Long userId);
 
+    @Query("select p.id from Post p where p.user.id = :userId")
+    List<Long> findIdsByUserId(@Param("userId") Long userId);
+
     // Atomic SQL increments/decrements, not read-modify-write on the entity — two concurrent
     // likes/comments both reading like_count=5 and writing 6 would otherwise lose one update.
     @Modifying

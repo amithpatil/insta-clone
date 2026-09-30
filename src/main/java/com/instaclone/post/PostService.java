@@ -124,6 +124,16 @@ public class PostService {
         eventPublisher.publishEvent(SearchIndexEvent.delete(searchProperties.postsIndex(), String.valueOf(postId)));
     }
 
+    /**
+     * Called once a reel's async transcode finishes successfully (see MediaUploadConsumer) — only
+     * then is it actually playable, so only then should it become searchable, mirroring
+     * PostRepository.READY_FILTER's "not yet transcoded" exclusion applied by every other listing.
+     */
+    @Transactional
+    public void indexIfReady(Long postId) {
+        postRepository.findById(postId).ifPresent(this::indexForSearch);
+    }
+
     /** Public so ReelService (a video-specific Post variant) can reuse the same indexing rule. */
     public void indexForSearch(Post post) {
         // Private accounts' posts simply never enter the index — same "public accounts only"

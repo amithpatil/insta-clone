@@ -5,6 +5,7 @@ import com.instaclone.common.PageParams;
 import com.instaclone.common.SecurityUtils;
 import com.instaclone.post.PostResponse;
 import com.instaclone.post.PostService;
+import java.util.Locale;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,7 @@ public class HashtagController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit,
             @AuthenticationPrincipal Jwt jwt) {
-        return postService.getPostsByHashtag(tag.toLowerCase(), SecurityUtils.currentUserId(jwt), cursor, PageParams.clamp(limit));
+        return postService.getPostsByHashtag(
+                tag.toLowerCase(Locale.ROOT), SecurityUtils.currentUserId(jwt), cursor, PageParams.clamp(limit));
     }
 }

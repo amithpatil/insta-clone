@@ -92,9 +92,11 @@ public class ReelService {
         media.setStatus(MediaStatus.PENDING);
         media = mediaRepository.save(media);
 
-        // Only takes effect after this transaction commits — see MediaStreamPublisher.
+        // Only takes effect after this transaction commits — see MediaStreamPublisher. Search
+        // indexing happens once transcoding actually finishes (MediaUploadConsumer), not here —
+        // the media is still PENDING at this point, and every other listing hides a still-
+        // transcoding reel behind PostRepository.READY_FILTER; search must respect the same rule.
         eventPublisher.publishEvent(new MediaUploadedEvent(media.getId(), post.getId(), sourceObjectKey, userId));
-        postService.indexForSearch(post);
 
         return postService.toResponse(post, UserSummary.from(author), List.of(media), false);
     }

@@ -22,9 +22,11 @@ public class HashtagService {
     private static final Pattern HASHTAG_PATTERN = Pattern.compile("#(\\w+)", Pattern.UNICODE_CHARACTER_CLASS);
 
     private final HashtagRepository hashtagRepository;
+    private final HashtagCreator hashtagCreator;
 
-    public HashtagService(HashtagRepository hashtagRepository) {
+    public HashtagService(HashtagRepository hashtagRepository, HashtagCreator hashtagCreator) {
         this.hashtagRepository = hashtagRepository;
+        this.hashtagCreator = hashtagCreator;
     }
 
     /** Parses #tags out of the caption, get-or-creates each one, and attaches them to the post. */
@@ -46,16 +48,13 @@ public class HashtagService {
     }
 
     // Unlike the 1:1-conversation race Phase 3 hit, a hashtag's uniqueness IS a single-column
-    // constraint (hashtags.tag), so a lock isn't needed — saveAndFlush forces the constraint
-    // violation to surface here (instead of at the caller's eventual flush) so it can be caught
-    // and the row re-fetched, the same "unique constraint plus retry" shape GlobalExceptionHandler
-    // already treats as a first-class case elsewhere (register/follow/like races).
+    // constraint (hashtags.tag), so a lock isn't needed. The insert attempt runs in HashtagCreator's
+    // own REQUIRES_NEW transaction so a losing race only aborts that isolated transaction — retrying
+    // the lookup here runs on this method's own (still-valid) transaction instead of the poisoned one.
     private Hashtag getOrCreate(String tag) {
         return hashtagRepository.findByTag(tag).orElseGet(() -> {
             try {
-                Hashtag hashtag = new Hashtag();
-                hashtag.setTag(tag);
-                return hashtagRepository.saveAndFlush(hashtag);
+                return hashtagCreator.create(tag);
             } catch (DataIntegrityViolationException e) {
                 return hashtagRepository.findByTag(tag).orElseThrow(() -> e);
             }

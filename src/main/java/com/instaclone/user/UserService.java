@@ -58,6 +58,7 @@ public class UserService {
     @Transactional
     public UserProfileResponse updateProfile(Long userId, UpdateProfileRequest request) {
         User user = findByIdOrThrow(userId);
+        boolean wasPrivate = user.isPrivate();
         if (request.fullName() != null) {
             user.setFullName(request.fullName());
         }
@@ -73,6 +74,14 @@ public class UserService {
         user.setUpdatedAt(Instant.now());
         eventPublisher.publishEvent(SearchIndexEvent.upsert(
                 searchProperties.usersIndex(), String.valueOf(user.getId()), SearchDocuments.forUser(user)));
+        // Account just went private: retract this user's posts from search, mirroring the
+        // "public accounts only" rule PostService.indexForSearch enforces at write time — otherwise
+        // posts indexed while public would stay searchable forever after the account is locked.
+        if (!wasPrivate && user.isPrivate()) {
+            postRepository.findIdsByUserId(user.getId())
+                    .forEach(postId -> eventPublisher.publishEvent(
+                            SearchIndexEvent.delete(searchProperties.postsIndex(), String.valueOf(postId))));
+        }
         return toProfileResponse(user, userId);
     }
 

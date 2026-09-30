@@ -2,6 +2,7 @@ package com.instaclone.media;
 
 import com.instaclone.post.MediaRepository;
 import com.instaclone.post.MediaStatus;
+import com.instaclone.post.PostService;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,24 +26,31 @@ public class MediaUploadConsumer implements StreamListener<String, MapRecord<Str
     private final MediaRepository mediaRepository;
     private final MediaProcessingService mediaProcessingService;
     private final StringRedisTemplate redisTemplate;
+    private final PostService postService;
 
     public MediaUploadConsumer(
-            MediaRepository mediaRepository, MediaProcessingService mediaProcessingService, StringRedisTemplate redisTemplate) {
+            MediaRepository mediaRepository,
+            MediaProcessingService mediaProcessingService,
+            StringRedisTemplate redisTemplate,
+            PostService postService) {
         this.mediaRepository = mediaRepository;
         this.mediaProcessingService = mediaProcessingService;
         this.redisTemplate = redisTemplate;
+        this.postService = postService;
     }
 
     @Override
     public void onMessage(MapRecord<String, String, String> message) {
         Map<String, String> body = message.getValue();
         Long mediaId = Long.valueOf(body.get("mediaId"));
+        Long postId = Long.valueOf(body.get("postId"));
         String sourceObjectKey = body.get("sourceObjectKey");
         Long userId = Long.valueOf(body.get("userId"));
         try {
             updateStatus(mediaId, MediaStatus.PROCESSING);
             TranscodeResult result = mediaProcessingService.transcodeAndThumbnail(sourceObjectKey, userId);
             applyResult(mediaId, result);
+            postService.indexIfReady(postId);
             log.info("Reel transcode complete for media {}", mediaId);
         } catch (Exception e) {
             log.error("Reel transcode failed for media {}", mediaId, e);
