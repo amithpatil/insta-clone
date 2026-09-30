@@ -35,5 +35,26 @@ services:
     volumes:
       - 'seaweedfs-data:/data'
 
+  # The app itself, containerized — opt-in via `docker compose --profile full up`. Plain
+  # `docker compose up -d` (the everyday dev flow used throughout this project, pairing this file
+  # with `./mvnw spring-boot:run` on the host) is completely unaffected: this service is excluded
+  # by default, so it can't collide with a host-run instance on the same port 8080.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ['full']
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - '8080:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_started
+
 volumes:
   seaweedfs-data:

@@ -46,8 +46,14 @@ public class StorageConfig {
 
     @Bean
     public S3Presigner s3Presigner(StorageProperties props) {
+        // publicBaseUrl, not endpoint: a presigned URL's host is part of what's signed, and it's
+        // handed to an external client (curl, a browser) to PUT/GET directly — it must be an
+        // address that client can reach. That's the same value as endpoint when the app runs on
+        // the host (application.yml's default), but the two diverge once the app runs inside the
+        // compose network (application-docker.yml): endpoint becomes the internal "seaweedfs" DNS
+        // name for the app's own calls, while publicBaseUrl stays the host-reachable address.
         return S3Presigner.builder()
-                .endpointOverride(URI.create(props.endpoint()))
+                .endpointOverride(URI.create(props.publicBaseUrl()))
                 .region(Region.of(props.region()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.accessKey(), props.secretKey())))

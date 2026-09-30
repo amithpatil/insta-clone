@@ -1,0 +1,28 @@
+# Active only inside the app's own container (compose.yaml sets SPRING_PROFILES_ACTIVE=docker).
+# The host-based `./mvnw spring-boot:run` dev flow never activates this profile and is unaffected.
+#
+# spring.docker.compose.* auto-detection (see application.yml's default profile) is for a host
+# process orchestrating compose services for itself; it doesn't apply — and would be actively wrong
+# — once the app is itself one of those services, so it's turned off and every connection is given
+# explicitly, addressed by the other services' compose DNS names instead of host-mapped ports.
+spring:
+  docker:
+    compose:
+      enabled: false
+  datasource:
+    url: jdbc:postgresql://postgres:5432/instaclone
+    username: instaclone
+    password: instaclone
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+app:
+  storage:
+    # Internal address, used for the app's own calls to storage (bucket creation, and the media
+    # worker's download/upload during transcoding). app.storage.public-base-url is deliberately
+    # NOT overridden here — it stays the host-reachable address from application.yml, since it's
+    # embedded in presigned upload URLs handed back to external clients (curl, a browser, a phone),
+    # which can't resolve the "seaweedfs" compose DNS name.
+    endpoint: http://seaweedfs:8333
