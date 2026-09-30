@@ -8,6 +8,12 @@ import org.springframework.data.repository.query.Param;
 
 public interface CommentRepository extends JpaRepository<Comment, Long> {
 
+    @Query("select c.id from Comment c where c.parent.id = :parentId")
+    List<Long> findReplyIdsByParentId(@Param("parentId") Long parentId);
+
+    @Query("select c.id from Comment c where c.post.id = :postId")
+    List<Long> findIdsByPostId(@Param("postId") Long postId);
+
     @Query(
             value = "SELECT * FROM comments WHERE post_id = :postId ORDER BY created_at ASC, id ASC LIMIT :limit",
             nativeQuery = true)

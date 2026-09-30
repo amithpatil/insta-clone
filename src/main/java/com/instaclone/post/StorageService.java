@@ -44,7 +44,10 @@ public class StorageService {
                 .build();
 
         PresignedPutObjectRequest presigned = presigner.presignPutObject(presignRequest);
-        String publicUrl = props.publicBaseUrl() + "/" + objectKey;
+        // Derived from the same props.bucket() used to sign the PUT above, not an independently
+        // configured value — otherwise the two can drift (e.g. a bucket rename) and publicUrl
+        // silently points at the wrong object.
+        String publicUrl = props.publicBaseUrl() + "/" + props.bucket() + "/" + objectKey;
 
         return new PresignedUploadResponse(presigned.url().toString(), objectKey, publicUrl);
     }

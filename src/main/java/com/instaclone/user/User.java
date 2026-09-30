@@ -51,4 +51,15 @@ public class User {
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+
+    /** Single source of truth for private-account visibility; use via {@link ProfileVisibilityService}. */
+    public boolean isVisibleTo(User viewer, boolean viewerFollowsThisUser) {
+        if (!isPrivate) {
+            return true;
+        }
+        if (viewer == null) {
+            return false;
+        }
+        return viewer.getId().equals(id) || viewerFollowsThisUser;
+    }
 }

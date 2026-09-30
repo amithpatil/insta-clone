@@ -8,6 +8,9 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -29,7 +32,8 @@ app:
     access-key: local
     secret-key: local
     bucket: instaclone-media
-    public-base-url: http://localhost:8333/instaclone-media
+    # Host only — StorageService appends the bucket itself so the signed and public URLs can't drift apart.
+    public-base-url: http://localhost:8333
     auto-create-bucket: true
 
 management:
@@ -37,3 +41,23 @@ management:
     web:
       exposure:
         include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+# Verbose on purpose for local testing: SQL + bound parameters, and Spring Security's own
+# authorization decisions, on top of the request-in/request-out lines from RequestLoggingFilter.
+# Never dial app-level logging below INFO in a shared/deployed environment — passwords never get
+# logged (RequestLoggingFilter and the auth endpoints deliberately never log bodies), but this
+# much detail isn't something you want in a shared environment's logs either.
+logging:
+  pattern:
+    console: "%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr([%X{requestId:-        }]){yellow} %clr(---){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
+  level:
+    com.instaclone: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+    org.springframework.security: DEBUG

@@ -7,13 +7,18 @@ import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
 import com.instaclone.post.Post;
 import com.instaclone.post.PostRepository;
-import com.instaclone.social.follow.FollowRepository;
-import com.instaclone.social.follow.FollowStatus;
+import com.instaclone.social.like.LikeRepository;
+import com.instaclone.social.like.LikeableType;
+import com.instaclone.user.ProfileVisibilityService;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
 import com.instaclone.user.UserSummary;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,17 +28,20 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
     private final UserRepository userRepository;
-    private final FollowRepository followRepository;
+    private final LikeRepository likeRepository;
+    private final ProfileVisibilityService profileVisibilityService;
 
     public CommentService(
             CommentRepository commentRepository,
             PostRepository postRepository,
             UserRepository userRepository,
-            FollowRepository followRepository) {
+            LikeRepository likeRepository,
+            ProfileVisibilityService profileVisibilityService) {
         this.commentRepository = commentRepository;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
-        this.followRepository = followRepository;
+        this.likeRepository = likeRepository;
+        this.profileVisibilityService = profileVisibilityService;
     }
 
     @Transactional
@@ -63,9 +71,9 @@ public class CommentService {
         comment.setCreatedAt(Instant.now());
         comment = commentRepository.save(comment);
 
-        post.incrementCommentCount();
+        postRepository.incrementCommentCount(postId);
 
-        return toResponse(comment, author);
+        return toResponse(comment, UserSummary.from(author));
     }
 
     @Transactional(readOnly = true)
@@ -74,14 +82,20 @@ public class CommentService {
         User viewer = userRepository.findById(viewerId).orElseThrow(() -> new NotFoundException("User not found"));
         assertVisible(post, viewer);
 
-        List<Comment> rows = cursor == null
+        Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
+        List<Comment> rows = decoded == null
                 ? commentRepository.findFirstPageByPostId(postId, limit + 1)
-                : commentRepository.findPageByPostIdAfterCursor(
-                        postId, Cursor.decode(cursor).createdAt(), Cursor.decode(cursor).id(), limit + 1);
+                : commentRepository.findPageByPostIdAfterCursor(postId, decoded.createdAt(), decoded.id(), limit + 1);
 
         CursorPage<Comment> page = CursorPage.of(rows, limit, c -> new Cursor(c.getCreatedAt(), c.getId()));
-        List<CommentResponse> items =
-                page.items().stream().map(c -> toResponse(c, c.getUser())).toList();
+
+        Set<Long> authorIds = page.items().stream().map(c -> c.getUser().getId()).collect(Collectors.toSet());
+        Map<Long, UserSummary> authorsById = userRepository.findAllById(authorIds).stream()
+                .collect(Collectors.toMap(User::getId, UserSummary::from));
+
+        List<CommentResponse> items = page.items().stream()
+                .map(c -> toResponse(c, authorsById.get(c.getUser().getId())))
+                .toList();
         return new CursorPage<>(items, page.nextCursor(), page.hasMore());
     }
 
@@ -92,25 +106,30 @@ public class CommentService {
         if (!comment.getUser().getId().equals(requesterId)) {
             throw new ForbiddenException("You can only delete your own comments");
         }
+
+        // parent_comment_id has ON DELETE CASCADE, so deleting a top-level comment silently
+        // deletes its replies too — account for those rows explicitly, both for the post's
+        // comment_count and for cleaning up their now-orphaned likes.
+        List<Long> replyIds = commentRepository.findReplyIdsByParentId(commentId);
+        List<Long> deletedCommentIds = new ArrayList<>(replyIds);
+        deletedCommentIds.add(commentId);
+        likeRepository.deleteByLikeableTypeAndLikeableIdIn(LikeableType.COMMENT, deletedCommentIds);
+
+        Long postId = comment.getPost().getId();
         commentRepository.delete(comment);
-        comment.getPost().decrementCommentCount();
+        postRepository.decrementCommentCountBy(postId, 1 + replyIds.size());
     }
 
     private void assertVisible(Post post, User viewer) {
-        User author = post.getUser();
-        boolean visible = !author.isPrivate()
-                || author.getId().equals(viewer.getId())
-                || followRepository.existsByFollowerIdAndFolloweeIdAndStatus(
-                        viewer.getId(), author.getId(), FollowStatus.ACCEPTED);
-        if (!visible) {
+        if (!profileVisibilityService.isVisible(post.getUser(), viewer)) {
             throw new ForbiddenException("This account is private");
         }
     }
 
-    private CommentResponse toResponse(Comment comment, User author) {
+    private CommentResponse toResponse(Comment comment, UserSummary author) {
         return new CommentResponse(
                 comment.getId(),
-                UserSummary.from(author),
+                author,
                 comment.getText(),
                 comment.getParent() != null ? comment.getParent().getId() : null,
                 comment.getLikeCount(),

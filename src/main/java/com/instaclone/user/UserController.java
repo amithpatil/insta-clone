@@ -38,15 +38,17 @@ public class UserController {
     public CursorPage<UserSummary> getFollowers(
             @PathVariable String username,
             @RequestParam(required = false) String cursor,
-            @RequestParam(required = false) Integer limit) {
-        return userService.getFollowers(username, cursor, PageParams.clamp(limit));
+            @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal Jwt jwt) {
+        return userService.getFollowers(username, SecurityUtils.currentUserId(jwt), cursor, PageParams.clamp(limit));
     }
 
     @GetMapping("/{username}/following")
     public CursorPage<UserSummary> getFollowing(
             @PathVariable String username,
             @RequestParam(required = false) String cursor,
-            @RequestParam(required = false) Integer limit) {
-        return userService.getFollowing(username, cursor, PageParams.clamp(limit));
+            @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal Jwt jwt) {
+        return userService.getFollowing(username, SecurityUtils.currentUserId(jwt), cursor, PageParams.clamp(limit));
     }
 }

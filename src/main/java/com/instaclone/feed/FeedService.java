@@ -9,6 +9,7 @@ import com.instaclone.post.PostService;
 import com.instaclone.social.follow.FollowRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Plain DB query for now, matching the build plan's Phase 1 scope — the home feed only moves
@@ -28,16 +29,17 @@ public class FeedService {
         this.postService = postService;
     }
 
+    @Transactional(readOnly = true)
     public CursorPage<PostResponse> getHomeFeed(Long viewerId, String cursor, int limit) {
         List<Long> followedIds = followRepository.findAcceptedFolloweeIds(viewerId);
         if (followedIds.isEmpty()) {
             return new CursorPage<>(List.of(), null, false);
         }
 
-        List<Post> rows = cursor == null
+        Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
+        List<Post> rows = decoded == null
                 ? postRepository.findFirstPageByUserIds(followedIds, limit + 1)
-                : postRepository.findPageByUserIdsAfterCursor(
-                        followedIds, Cursor.decode(cursor).createdAt(), Cursor.decode(cursor).id(), limit + 1);
+                : postRepository.findPageByUserIdsAfterCursor(followedIds, decoded.createdAt(), decoded.id(), limit + 1);
 
         return postService.toPage(rows, limit, viewerId);
     }

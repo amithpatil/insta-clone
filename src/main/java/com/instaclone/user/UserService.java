@@ -2,6 +2,7 @@ package com.instaclone.user;
 
 import com.instaclone.common.Cursor;
 import com.instaclone.common.CursorPage;
+import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
 import com.instaclone.post.PostRepository;
 import com.instaclone.social.follow.FollowRepository;
@@ -18,11 +19,17 @@ public class UserService {
     private final UserRepository userRepository;
     private final FollowRepository followRepository;
     private final PostRepository postRepository;
+    private final ProfileVisibilityService profileVisibilityService;
 
-    public UserService(UserRepository userRepository, FollowRepository followRepository, PostRepository postRepository) {
+    public UserService(
+            UserRepository userRepository,
+            FollowRepository followRepository,
+            PostRepository postRepository,
+            ProfileVisibilityService profileVisibilityService) {
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.postRepository = postRepository;
+        this.profileVisibilityService = profileVisibilityService;
     }
 
     public User findByUsernameOrThrow(String username) {
@@ -57,22 +64,33 @@ public class UserService {
         return toProfileResponse(user, userId);
     }
 
-    public CursorPage<UserSummary> getFollowers(String username, String cursor, int limit) {
+    public CursorPage<UserSummary> getFollowers(String username, Long viewerId, String cursor, int limit) {
         User target = findByUsernameOrThrow(username);
-        List<FollowUserRow> rows = cursor == null
+        assertVisible(target, viewerId);
+        Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
+        List<FollowUserRow> rows = decoded == null
                 ? followRepository.findFirstPageFollowers(target.getId(), limit + 1)
                 : followRepository.findPageFollowersAfterCursor(
-                        target.getId(), Cursor.decode(cursor).createdAt(), Cursor.decode(cursor).id(), limit + 1);
+                        target.getId(), decoded.createdAt(), decoded.id(), limit + 1);
         return toUserSummaryPage(rows, limit);
     }
 
-    public CursorPage<UserSummary> getFollowing(String username, String cursor, int limit) {
+    public CursorPage<UserSummary> getFollowing(String username, Long viewerId, String cursor, int limit) {
         User target = findByUsernameOrThrow(username);
-        List<FollowUserRow> rows = cursor == null
+        assertVisible(target, viewerId);
+        Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
+        List<FollowUserRow> rows = decoded == null
                 ? followRepository.findFirstPageFollowing(target.getId(), limit + 1)
                 : followRepository.findPageFollowingAfterCursor(
-                        target.getId(), Cursor.decode(cursor).createdAt(), Cursor.decode(cursor).id(), limit + 1);
+                        target.getId(), decoded.createdAt(), decoded.id(), limit + 1);
         return toUserSummaryPage(rows, limit);
+    }
+
+    private void assertVisible(User target, Long viewerId) {
+        User viewer = findByIdOrThrow(viewerId);
+        if (!profileVisibilityService.isVisible(target, viewer)) {
+            throw new ForbiddenException("This account is private");
+        }
     }
 
     private CursorPage<UserSummary> toUserSummaryPage(List<FollowUserRow> rows, int limit) {

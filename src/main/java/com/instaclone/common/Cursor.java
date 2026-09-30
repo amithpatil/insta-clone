@@ -11,15 +11,20 @@ import java.util.Base64;
 public record Cursor(Instant createdAt, long id) {
 
     public String encode() {
-        String raw = createdAt.toEpochMilli() + ":" + id;
+        // Full (epochSecond, nano) precision — createdAt.toEpochMilli() would floor away the
+        // sub-millisecond component that Postgres timestamptz and Instant.now() both carry,
+        // which corrupts the row-value comparison this cursor drives (skips rows that share a
+        // millisecond with the boundary row).
+        String raw = createdAt.getEpochSecond() + ":" + createdAt.getNano() + ":" + id;
         return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(StandardCharsets.UTF_8));
     }
 
     public static Cursor decode(String encoded) {
         try {
             String raw = new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8);
-            String[] parts = raw.split(":", 2);
-            return new Cursor(Instant.ofEpochMilli(Long.parseLong(parts[0])), Long.parseLong(parts[1]));
+            String[] parts = raw.split(":", 3);
+            Instant createdAt = Instant.ofEpochSecond(Long.parseLong(parts[0]), Long.parseLong(parts[1]));
+            return new Cursor(createdAt, Long.parseLong(parts[2]));
         } catch (Exception e) {
             throw new BadRequestException("Invalid cursor");
         }
