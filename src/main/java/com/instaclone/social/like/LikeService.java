@@ -2,12 +2,15 @@ package com.instaclone.social.like;
 
 import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
+import com.instaclone.notification.NotificationEvent;
+import com.instaclone.notification.NotificationType;
 import com.instaclone.post.Post;
 import com.instaclone.post.PostRepository;
 import com.instaclone.user.ProfileVisibilityService;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
 import java.time.Instant;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,16 +21,19 @@ public class LikeService {
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final ProfileVisibilityService profileVisibilityService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public LikeService(
             LikeRepository likeRepository,
             PostRepository postRepository,
             UserRepository userRepository,
-            ProfileVisibilityService profileVisibilityService) {
+            ProfileVisibilityService profileVisibilityService,
+            ApplicationEventPublisher eventPublisher) {
         this.likeRepository = likeRepository;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.profileVisibilityService = profileVisibilityService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -47,6 +53,12 @@ public class LikeService {
             likeRepository.save(like);
 
             postRepository.incrementLikeCount(postId);
+
+            Long recipientId = post.getUser().getId();
+            if (!recipientId.equals(userId)) {
+                eventPublisher.publishEvent(
+                        new NotificationEvent(recipientId, userId, NotificationType.LIKE, "POST", postId));
+            }
         }
 
         return new LikeCountResponse(alreadyLiked ? post.getLikeCount() : post.getLikeCount() + 1, true);

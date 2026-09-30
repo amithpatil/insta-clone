@@ -3,9 +3,12 @@ package com.instaclone.social.follow;
 import com.instaclone.common.BadRequestException;
 import com.instaclone.common.ConflictException;
 import com.instaclone.common.NotFoundException;
+import com.instaclone.notification.NotificationEvent;
+import com.instaclone.notification.NotificationType;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
 import java.time.Instant;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,10 +17,13 @@ public class FollowService {
 
     private final FollowRepository followRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public FollowService(FollowRepository followRepository, UserRepository userRepository) {
+    public FollowService(
+            FollowRepository followRepository, UserRepository userRepository, ApplicationEventPublisher eventPublisher) {
         this.followRepository = followRepository;
         this.userRepository = userRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -38,6 +44,9 @@ public class FollowService {
         follow.setStatus(followee.isPrivate() ? FollowStatus.PENDING : FollowStatus.ACCEPTED);
         follow.setCreatedAt(Instant.now());
         followRepository.save(follow);
+
+        eventPublisher.publishEvent(
+                new NotificationEvent(followee.getId(), followerId, NotificationType.FOLLOW, "USER", followerId));
 
         return new FollowStatusResponse(follow.getStatus());
     }

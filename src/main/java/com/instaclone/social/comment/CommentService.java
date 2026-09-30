@@ -5,6 +5,8 @@ import com.instaclone.common.Cursor;
 import com.instaclone.common.CursorPage;
 import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
+import com.instaclone.notification.NotificationEvent;
+import com.instaclone.notification.NotificationType;
 import com.instaclone.post.Post;
 import com.instaclone.post.PostRepository;
 import com.instaclone.social.like.LikeRepository;
@@ -19,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,18 +33,21 @@ public class CommentService {
     private final UserRepository userRepository;
     private final LikeRepository likeRepository;
     private final ProfileVisibilityService profileVisibilityService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CommentService(
             CommentRepository commentRepository,
             PostRepository postRepository,
             UserRepository userRepository,
             LikeRepository likeRepository,
-            ProfileVisibilityService profileVisibilityService) {
+            ProfileVisibilityService profileVisibilityService,
+            ApplicationEventPublisher eventPublisher) {
         this.commentRepository = commentRepository;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.likeRepository = likeRepository;
         this.profileVisibilityService = profileVisibilityService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -72,6 +78,11 @@ public class CommentService {
         comment = commentRepository.save(comment);
 
         postRepository.incrementCommentCount(postId);
+
+        Long recipientId = post.getUser().getId();
+        if (!recipientId.equals(userId)) {
+            eventPublisher.publishEvent(new NotificationEvent(recipientId, userId, NotificationType.COMMENT, "POST", postId));
+        }
 
         return toResponse(comment, UserSummary.from(author));
     }

@@ -27,7 +27,11 @@ public class SecurityConfig {
                                 "/actuator/info",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
-                                "/v3/api-docs/**")
+                                "/v3/api-docs/**",
+                                // The WebSocket handshake itself carries no bearer token (browsers can't
+                                // attach headers to it) — real auth is StompAuthChannelInterceptor,
+                                // gating the STOMP CONNECT frame one level up.
+                                "/ws/**")
                         .permitAll()
                         .anyRequest()
                         .authenticated())
