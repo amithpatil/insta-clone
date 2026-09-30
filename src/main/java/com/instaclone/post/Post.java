@@ -53,29 +53,4 @@ public class Post {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    public void incrementLikeCount() {
-        this.likeCount++;
-    }
-
-    public void decrementLikeCount() {
-        this.likeCount = Math.max(0, likeCount - 1);
-    }
-
-    public void incrementCommentCount() {
-        this.commentCount++;
-    }
-
-    public void decrementCommentCount() {
-        this.commentCount = Math.max(0, commentCount - 1);
-    }
-
-    public boolean isVisibleTo(User viewer, boolean viewerFollowsAuthor) {
-        if (!user.isPrivate()) {
-            return true;
-        }
-        if (viewer == null) {
-            return false;
-        }
-        return viewer.getId().equals(user.getId()) || viewerFollowsAuthor;
-    }
 }

@@ -10,6 +10,10 @@ public interface LikeRepository extends JpaRepository<Like, Long> {
 
     boolean existsByUserIdAndLikeableTypeAndLikeableId(Long userId, LikeableType likeableType, Long likeableId);
 
+    void deleteByLikeableTypeAndLikeableId(LikeableType likeableType, Long likeableId);
+
+    void deleteByLikeableTypeAndLikeableIdIn(LikeableType likeableType, List<Long> likeableIds);
+
     @org.springframework.data.jpa.repository.Query(
             "select l.likeableId from Like l where l.user.id = :userId and l.likeableType = :type and l.likeableId in :ids")
     List<Long> findLikedIds(

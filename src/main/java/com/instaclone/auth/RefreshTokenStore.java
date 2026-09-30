@@ -40,12 +40,10 @@ public class RefreshTokenStore {
 
     public Optional<Long> consume(String rawToken) {
         String key = KEY_PREFIX + hash(rawToken);
-        String userId = redisTemplate.opsForValue().get(key);
-        if (userId == null) {
-            return Optional.empty();
-        }
-        redisTemplate.delete(key);
-        return Optional.of(Long.valueOf(userId));
+        // Atomic GETDEL, not a separate get()+delete() — two round trips would let two concurrent
+        // refresh calls both read the key before either deletes it, redeeming a single-use token twice.
+        String userId = redisTemplate.opsForValue().getAndDelete(key);
+        return Optional.ofNullable(userId).map(Long::valueOf);
     }
 
     public void revoke(String rawToken) {

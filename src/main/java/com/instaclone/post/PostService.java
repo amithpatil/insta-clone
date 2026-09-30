@@ -1,13 +1,15 @@
 package com.instaclone.post;
 
+import com.instaclone.common.BadRequestException;
 import com.instaclone.common.Cursor;
 import com.instaclone.common.CursorPage;
 import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
-import com.instaclone.social.follow.FollowRepository;
-import com.instaclone.social.follow.FollowStatus;
+import com.instaclone.config.StorageProperties;
+import com.instaclone.social.comment.CommentRepository;
 import com.instaclone.social.like.LikeRepository;
 import com.instaclone.social.like.LikeableType;
+import com.instaclone.user.ProfileVisibilityService;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
 import com.instaclone.user.UserSummary;
@@ -26,25 +28,37 @@ public class PostService {
     private final PostRepository postRepository;
     private final MediaRepository mediaRepository;
     private final UserRepository userRepository;
-    private final FollowRepository followRepository;
+    private final CommentRepository commentRepository;
     private final LikeRepository likeRepository;
+    private final ProfileVisibilityService profileVisibilityService;
+    private final StorageProperties storageProperties;
 
     public PostService(
             PostRepository postRepository,
             MediaRepository mediaRepository,
             UserRepository userRepository,
-            FollowRepository followRepository,
-            LikeRepository likeRepository) {
+            CommentRepository commentRepository,
+            LikeRepository likeRepository,
+            ProfileVisibilityService profileVisibilityService,
+            StorageProperties storageProperties) {
         this.postRepository = postRepository;
         this.mediaRepository = mediaRepository;
         this.userRepository = userRepository;
-        this.followRepository = followRepository;
+        this.commentRepository = commentRepository;
         this.likeRepository = likeRepository;
+        this.profileVisibilityService = profileVisibilityService;
+        this.storageProperties = storageProperties;
     }
 
     @Transactional
     public PostResponse createPost(Long userId, CreatePostRequest request) {
         User author = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
+
+        String mediaUrl = request.media().url();
+        String requiredPrefix = storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/";
+        if (!mediaUrl.startsWith(requiredPrefix)) {
+            throw new BadRequestException("Media url must reference an object uploaded via /posts/upload-url");
+        }
 
         Post post = new Post();
         post.setUser(author);
@@ -57,7 +71,7 @@ public class PostService {
 
         Media media = new Media();
         media.setPost(post);
-        media.setUrl(request.media().url());
+        media.setUrl(mediaUrl);
         media.setMediaType(MediaType.IMAGE);
         media.setWidth(request.media().width());
         media.setHeight(request.media().height());
@@ -84,6 +98,12 @@ public class PostService {
         if (!post.getUser().getId().equals(requesterId)) {
             throw new ForbiddenException("You can only delete your own posts");
         }
+
+        List<Long> commentIds = commentRepository.findIdsByPostId(postId);
+        if (!commentIds.isEmpty()) {
+            likeRepository.deleteByLikeableTypeAndLikeableIdIn(LikeableType.COMMENT, commentIds);
+        }
+        likeRepository.deleteByLikeableTypeAndLikeableId(LikeableType.POST, postId);
         postRepository.delete(post);
     }
 
@@ -91,14 +111,15 @@ public class PostService {
     public CursorPage<PostResponse> getUserPosts(String username, Long viewerId, String cursor, int limit) {
         User author = userRepository.findByUsername(username).orElseThrow(() -> new NotFoundException("User not found"));
         User viewer = userRepository.findById(viewerId).orElseThrow(() -> new NotFoundException("User not found"));
-        if (!canViewProfile(author, viewer)) {
+        if (!profileVisibilityService.isVisible(author, viewer)) {
             throw new ForbiddenException("This account is private");
         }
 
-        List<Post> rows = cursor == null
+        Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
+        List<Post> rows = decoded == null
                 ? postRepository.findFirstPageByUserId(author.getId(), limit + 1)
                 : postRepository.findPageByUserIdAfterCursor(
-                        author.getId(), Cursor.decode(cursor).createdAt(), Cursor.decode(cursor).id(), limit + 1);
+                        author.getId(), decoded.createdAt(), decoded.id(), limit + 1);
 
         return toPage(rows, limit, viewerId);
     }
@@ -134,17 +155,9 @@ public class PostService {
     }
 
     private void assertVisible(Post post, User viewer) {
-        if (!canViewProfile(post.getUser(), viewer)) {
+        if (!profileVisibilityService.isVisible(post.getUser(), viewer)) {
             throw new ForbiddenException("This account is private");
         }
-    }
-
-    private boolean canViewProfile(User author, User viewer) {
-        if (!author.isPrivate() || author.getId().equals(viewer.getId())) {
-            return true;
-        }
-        return followRepository.existsByFollowerIdAndFolloweeIdAndStatus(
-                viewer.getId(), author.getId(), FollowStatus.ACCEPTED);
     }
 
     private PostResponse toResponse(Post post, UserSummary author, List<Media> media, boolean likedByViewer) {

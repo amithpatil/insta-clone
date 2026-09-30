@@ -37,7 +37,8 @@ class CoreSocialGraphIntegrationTest {
         String aliceToken = register("alice", "alice@example.com");
         String bobToken = register("bob", "bob@example.com");
 
-        Map<String, Object> media = Map.of("url", "https://example.com/img.jpg", "width", 800, "height", 600);
+        Map<String, Object> media = Map.of(
+                "url", "http://localhost:8333/instaclone-media/posts/test.jpg", "width", 800, "height", 600);
         Map<String, Object> createPost = Map.of("caption", "hello world", "media", media);
         ResponseEntity<Map> postResponse =
                 rest.exchange("/posts", HttpMethod.POST, new HttpEntity<>(createPost, bearer(aliceToken)), Map.class);
