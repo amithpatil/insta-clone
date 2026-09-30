@@ -26,4 +26,12 @@ public class FeedController {
             @AuthenticationPrincipal Jwt jwt) {
         return feedService.getHomeFeed(SecurityUtils.currentUserId(jwt), cursor, PageParams.clamp(limit));
     }
+
+    @GetMapping("/explore")
+    public CursorPage<PostResponse> getExploreFeed(
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal Jwt jwt) {
+        return feedService.getExploreFeed(SecurityUtils.currentUserId(jwt), cursor, PageParams.clamp(limit));
+    }
 }

@@ -10,4 +10,10 @@ public record StorageProperties(
         String secretKey,
         String bucket,
         String publicBaseUrl,
-        boolean autoCreateBucket) {}
+        boolean autoCreateBucket) {
+
+    /** True when the url points at an object this app itself uploaded, not an arbitrary external URL. */
+    public boolean isOwnedUrl(String url) {
+        return url != null && url.startsWith(publicBaseUrl + "/" + bucket + "/");
+    }
+}

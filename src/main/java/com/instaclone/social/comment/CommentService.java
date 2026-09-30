@@ -87,7 +87,7 @@ public class CommentService {
                 ? commentRepository.findFirstPageByPostId(postId, limit + 1)
                 : commentRepository.findPageByPostIdAfterCursor(postId, decoded.createdAt(), decoded.id(), limit + 1);
 
-        CursorPage<Comment> page = CursorPage.of(rows, limit, c -> new Cursor(c.getCreatedAt(), c.getId()));
+        CursorPage<Comment> page = CursorPage.of(rows, limit, c -> new Cursor(c.getCreatedAt(), c.getId()).encode());
 
         Set<Long> authorIds = page.items().stream().map(c -> c.getUser().getId()).collect(Collectors.toSet());
         Map<Long, UserSummary> authorsById = userRepository.findAllById(authorIds).stream()

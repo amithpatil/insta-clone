@@ -49,6 +49,10 @@ public class Media {
     @Column(name = "thumbnail_url")
     private String thumbnailUrl;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private MediaStatus status = MediaStatus.READY;
+
     public boolean isVideo() {
         return mediaType == MediaType.VIDEO;
     }

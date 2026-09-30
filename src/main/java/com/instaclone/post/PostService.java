@@ -55,8 +55,7 @@ public class PostService {
         User author = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
 
         String mediaUrl = request.media().url();
-        String requiredPrefix = storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/";
-        if (!mediaUrl.startsWith(requiredPrefix)) {
+        if (!storageProperties.isOwnedUrl(mediaUrl)) {
             throw new BadRequestException("Media url must reference an object uploaded via /posts/upload-url");
         }
 
@@ -127,12 +126,15 @@ public class PostService {
     /** Used by FeedService, which already knows the raw (limit+1)-sized, keyset-ordered post rows. */
     @Transactional(readOnly = true)
     public CursorPage<PostResponse> toPage(List<Post> rowsWithLookahead, int limit, Long viewerId) {
-        CursorPage<Post> page = CursorPage.of(rowsWithLookahead, limit, p -> new Cursor(p.getCreatedAt(), p.getId()));
+        CursorPage<Post> page =
+                CursorPage.of(rowsWithLookahead, limit, p -> new Cursor(p.getCreatedAt(), p.getId()).encode());
         List<PostResponse> items = enrich(page.items(), viewerId);
         return new CursorPage<>(items, page.nextCursor(), page.hasMore());
     }
 
-    private List<PostResponse> enrich(List<Post> posts, Long viewerId) {
+    /** Batch-enriches an already-trimmed row set (author/media/likedByViewer) without re-paginating. */
+    @Transactional(readOnly = true)
+    public List<PostResponse> enrich(List<Post> posts, Long viewerId) {
         if (posts.isEmpty()) {
             return List.of();
         }
@@ -160,7 +162,8 @@ public class PostService {
         }
     }
 
-    private PostResponse toResponse(Post post, UserSummary author, List<Media> media, boolean likedByViewer) {
+    /** Public so ReelService (a video-specific Post variant) can reuse the same response shape. */
+    public PostResponse toResponse(Post post, UserSummary author, List<Media> media, boolean likedByViewer) {
         return new PostResponse(
                 post.getId(),
                 author,

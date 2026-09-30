@@ -32,7 +32,15 @@ public class StorageConfig {
                 .region(Region.of(props.region()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(props.accessKey(), props.secretKey())))
-                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                // chunkedEncodingEnabled(false): the AWS SDK's default streaming/chunked payload
+                // signing for PutObject isn't accepted by SeaweedFS's S3 gateway ("Signed request
+                // requires setting up SeaweedFS S3 authentication") — only matters for the direct
+                // server-side putObject calls the media transcode worker makes; the client-side
+                // presigned-PUT upload flow (StorageService) is unaffected either way.
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(true)
+                        .chunkedEncodingEnabled(false)
+                        .build())
                 .build();
     }
 

@@ -95,7 +95,7 @@ public class UserService {
 
     private CursorPage<UserSummary> toUserSummaryPage(List<FollowUserRow> rows, int limit) {
         CursorPage<FollowUserRow> page =
-                CursorPage.of(rows, limit, r -> new Cursor(r.getFollowCreatedAt(), r.getFollowId()));
+                CursorPage.of(rows, limit, r -> new Cursor(r.getFollowCreatedAt(), r.getFollowId()).encode());
         List<UserSummary> items = page.items().stream()
                 .map(r -> new UserSummary(r.getUserId(), r.getUsername(), r.getFullName(), r.getProfilePictureUrl()))
                 .toList();
