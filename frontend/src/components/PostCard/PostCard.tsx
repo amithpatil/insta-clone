@@ -4,10 +4,14 @@ import { Link, useLocation } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
 import { CaptionText } from '@/components/CaptionText'
 import { Icon } from '@/components/Icon'
+import { MediaCarousel } from '@/components/MediaCarousel'
+import { PostOptionsMenu } from '@/components/PostOptionsMenu'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import * as commentsApi from '@/lib/api/endpoints/comments'
 import type { Post } from '@/lib/api/types'
 import { formatCount, formatRelativeTime } from '@/lib/formatters/relativeTime'
 import { useLikeMutation } from '@/lib/hooks/useLikeMutation'
+import { useSaveMutation } from '@/lib/hooks/useSaveMutation'
 import { patchPostInAllCaches } from '@/lib/queryHelpers'
 import styles from './PostCard.module.css'
 
@@ -25,11 +29,10 @@ export function PostCard({ post, variant = 'feed' }: PostCardProps) {
   const detailLinkState = { backgroundLocation: location }
   const [showHeartBurst, setShowHeartBurst] = useState(false)
   const [commentText, setCommentText] = useState('')
-  const [saved, setSaved] = useState(false) // visual-only — no backend "saved posts" endpoint exists
   const queryClient = useQueryClient()
 
   const likeMutation = useLikeMutation(post.id, post.likedByViewer, post.likeCount)
-  const primaryMedia = post.media[0]
+  const saveMutation = useSaveMutation(post.id, post.savedByViewer)
 
   const commentMutation = useMutation({
     mutationFn: (text: string) => commentsApi.createComment(post.id, { text }),
@@ -63,22 +66,15 @@ export function PostCard({ post, variant = 'feed' }: PostCardProps) {
         <div className={styles.headerText}>
           <Link to={`/${post.author.username}`} className={styles.username}>
             {post.author.username}
+            {post.author.isVerified ? <VerifiedBadge size={12} className={styles.verifiedBadge} /> : null}
           </Link>
           {post.location ? <span className={styles.location}>{post.location}</span> : null}
         </div>
-        <button type="button" className={styles.optionsButton} aria-label="More options">
-          <Icon name="options" />
-        </button>
+        <PostOptionsMenu post={post} className={styles.optionsButton} />
       </header>
 
       <div className={styles.mediaWrapper} onDoubleClick={handleDoubleTapLike}>
-        {primaryMedia ? (
-          primaryMedia.mediaType === 'VIDEO' ? (
-            <video className={styles.media} src={primaryMedia.url} poster={primaryMedia.thumbnailUrl ?? undefined} controls />
-          ) : (
-            <img className={styles.media} src={primaryMedia.url} alt={post.caption || `Post by ${post.author.username}`} />
-          )
-        ) : null}
+        <MediaCarousel media={post.media} alt={post.caption || `Post by ${post.author.username}`} mediaClassName={styles.media} />
         <Icon
           name="heart"
           variant="filled"
@@ -106,11 +102,11 @@ export function PostCard({ post, variant = 'feed' }: PostCardProps) {
         <button
           type="button"
           className={[styles.actionButton, styles.bookmark].join(' ')}
-          onClick={() => setSaved((s) => !s)}
-          aria-pressed={saved}
-          aria-label={saved ? 'Remove from saved' : 'Save'}
+          onClick={() => saveMutation.mutate()}
+          aria-pressed={post.savedByViewer}
+          aria-label={post.savedByViewer ? 'Remove from saved' : 'Save'}
         >
-          <Icon name="bookmark" variant={saved ? 'filled' : 'outline'} />
+          <Icon name="bookmark" variant={post.savedByViewer ? 'filled' : 'outline'} />
         </button>
       </div>
 

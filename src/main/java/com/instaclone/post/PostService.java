@@ -14,11 +14,13 @@ import com.instaclone.search.SearchIndexEvent;
 import com.instaclone.social.comment.CommentRepository;
 import com.instaclone.social.like.LikeRepository;
 import com.instaclone.social.like.LikeableType;
+import com.instaclone.social.saved.SavedPostRepository;
 import com.instaclone.user.ProfileVisibilityService;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
 import com.instaclone.user.UserSummary;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +38,7 @@ public class PostService {
     private final UserRepository userRepository;
     private final CommentRepository commentRepository;
     private final LikeRepository likeRepository;
+    private final SavedPostRepository savedPostRepository;
     private final ProfileVisibilityService profileVisibilityService;
     private final StorageProperties storageProperties;
     private final HashtagService hashtagService;
@@ -48,6 +51,7 @@ public class PostService {
             UserRepository userRepository,
             CommentRepository commentRepository,
             LikeRepository likeRepository,
+            SavedPostRepository savedPostRepository,
             ProfileVisibilityService profileVisibilityService,
             StorageProperties storageProperties,
             HashtagService hashtagService,
@@ -58,6 +62,7 @@ public class PostService {
         this.userRepository = userRepository;
         this.commentRepository = commentRepository;
         this.likeRepository = likeRepository;
+        this.savedPostRepository = savedPostRepository;
         this.profileVisibilityService = profileVisibilityService;
         this.storageProperties = storageProperties;
         this.hashtagService = hashtagService;
@@ -69,32 +74,37 @@ public class PostService {
     public PostResponse createPost(Long userId, CreatePostRequest request) {
         User author = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
 
-        String mediaUrl = request.media().url();
-        if (!storageProperties.isOwnedUrl(mediaUrl)) {
-            throw new BadRequestException("Media url must reference an object uploaded via /posts/upload-url");
+        for (CreatePostRequest.MediaItem item : request.media()) {
+            if (!storageProperties.isOwnedUrl(item.url())) {
+                throw new BadRequestException("Media url must reference an object uploaded via /posts/upload-url");
+            }
         }
 
         Post post = new Post();
         post.setUser(author);
         post.setCaption(request.caption());
         post.setLocation(request.location());
-        post.setType(PostType.PHOTO);
-        post.setMediaCount(1);
+        post.setType(request.media().size() > 1 ? PostType.CAROUSEL : PostType.PHOTO);
+        post.setMediaCount(request.media().size());
         post.setCreatedAt(Instant.now());
         hashtagService.parseAndAttach(post, request.caption());
         post = postRepository.save(post);
 
-        Media media = new Media();
-        media.setPost(post);
-        media.setUrl(mediaUrl);
-        media.setMediaType(MediaType.IMAGE);
-        media.setWidth(request.media().width());
-        media.setHeight(request.media().height());
-        media.setPosition(0);
-        media = mediaRepository.save(media);
+        List<Media> media = new ArrayList<>();
+        int position = 0;
+        for (CreatePostRequest.MediaItem item : request.media()) {
+            Media m = new Media();
+            m.setPost(post);
+            m.setUrl(item.url());
+            m.setMediaType(MediaType.IMAGE);
+            m.setWidth(item.width());
+            m.setHeight(item.height());
+            m.setPosition(position++);
+            media.add(mediaRepository.save(m));
+        }
         indexForSearch(post);
 
-        return toResponse(post, UserSummary.from(author), List.of(media), false);
+        return toResponse(post, UserSummary.from(author), media, false, false);
     }
 
     @Transactional(readOnly = true)
@@ -105,7 +115,31 @@ public class PostService {
 
         List<Media> media = mediaRepository.findByPostIdOrderByPosition(postId);
         boolean liked = likeRepository.existsByUserIdAndLikeableTypeAndLikeableId(viewerId, LikeableType.POST, postId);
-        return toResponse(post, UserSummary.from(post.getUser()), media, liked);
+        boolean saved = savedPostRepository.existsByUserIdAndPostId(viewerId, postId);
+        return toResponse(post, UserSummary.from(post.getUser()), media, liked, saved);
+    }
+
+    @Transactional
+    public PostResponse updatePost(Long postId, Long requesterId, UpdatePostRequest request) {
+        Post post = postRepository.findById(postId).orElseThrow(() -> new NotFoundException("Post not found"));
+        if (!post.getUser().getId().equals(requesterId)) {
+            throw new ForbiddenException("You can only edit your own posts");
+        }
+
+        post.setCaption(request.caption());
+        post.setLocation(request.location());
+        if (request.caption() == null || request.caption().isBlank()) {
+            post.getHashtags().clear();
+        } else {
+            hashtagService.parseAndAttach(post, request.caption());
+        }
+        post = postRepository.save(post);
+        indexForSearch(post);
+
+        List<Media> media = mediaRepository.findByPostIdOrderByPosition(postId);
+        boolean liked = likeRepository.existsByUserIdAndLikeableTypeAndLikeableId(requesterId, LikeableType.POST, postId);
+        boolean saved = savedPostRepository.existsByUserIdAndPostId(requesterId, postId);
+        return toResponse(post, UserSummary.from(post.getUser()), media, liked, saved);
     }
 
     @Transactional
@@ -196,13 +230,15 @@ public class PostService {
         Map<Long, UserSummary> authorsById = userRepository.findAllById(authorIds).stream()
                 .collect(Collectors.toMap(User::getId, UserSummary::from));
         Set<Long> likedPostIds = new HashSet<>(likeRepository.findLikedIds(viewerId, LikeableType.POST, postIds));
+        Set<Long> savedPostIds = new HashSet<>(savedPostRepository.findSavedPostIds(viewerId, postIds));
 
         return posts.stream()
                 .map(p -> toResponse(
                         p,
                         authorsById.get(p.getUser().getId()),
                         mediaByPost.getOrDefault(p.getId(), List.of()),
-                        likedPostIds.contains(p.getId())))
+                        likedPostIds.contains(p.getId()),
+                        savedPostIds.contains(p.getId())))
                 .toList();
     }
 
@@ -213,7 +249,8 @@ public class PostService {
     }
 
     /** Public so ReelService (a video-specific Post variant) can reuse the same response shape. */
-    public PostResponse toResponse(Post post, UserSummary author, List<Media> media, boolean likedByViewer) {
+    public PostResponse toResponse(
+            Post post, UserSummary author, List<Media> media, boolean likedByViewer, boolean savedByViewer) {
         return new PostResponse(
                 post.getId(),
                 author,
@@ -224,6 +261,7 @@ public class PostService {
                 post.getLikeCount(),
                 post.getCommentCount(),
                 likedByViewer,
+                savedByViewer,
                 post.getCreatedAt(),
                 media.stream().map(MediaResponse::from).toList(),
                 post.getHashtags().stream().map(Hashtag::getTag).sorted().toList());

@@ -2,8 +2,10 @@ package com.instaclone.auth;
 
 import com.instaclone.common.ConflictException;
 import com.instaclone.common.UnauthorizedException;
+import com.instaclone.config.EmailProperties;
 import com.instaclone.config.JwtProperties;
 import com.instaclone.config.SearchProperties;
+import com.instaclone.email.EmailService;
 import com.instaclone.search.SearchDocuments;
 import com.instaclone.search.SearchIndexEvent;
 import com.instaclone.user.User;
@@ -26,6 +28,9 @@ public class AuthService {
     private final JwtEncoder jwtEncoder;
     private final JwtProperties jwtProperties;
     private final RefreshTokenStore refreshTokenStore;
+    private final PasswordResetTokenStore passwordResetTokenStore;
+    private final EmailService emailService;
+    private final EmailProperties emailProperties;
     private final ApplicationEventPublisher eventPublisher;
     private final SearchProperties searchProperties;
 
@@ -35,6 +40,9 @@ public class AuthService {
             JwtEncoder jwtEncoder,
             JwtProperties jwtProperties,
             RefreshTokenStore refreshTokenStore,
+            PasswordResetTokenStore passwordResetTokenStore,
+            EmailService emailService,
+            EmailProperties emailProperties,
             ApplicationEventPublisher eventPublisher,
             SearchProperties searchProperties) {
         this.userRepository = userRepository;
@@ -42,6 +50,9 @@ public class AuthService {
         this.jwtEncoder = jwtEncoder;
         this.jwtProperties = jwtProperties;
         this.refreshTokenStore = refreshTokenStore;
+        this.passwordResetTokenStore = passwordResetTokenStore;
+        this.emailService = emailService;
+        this.emailProperties = emailProperties;
         this.eventPublisher = eventPublisher;
         this.searchProperties = searchProperties;
     }
@@ -90,6 +101,32 @@ public class AuthService {
 
     public void logout(String rawRefreshToken) {
         refreshTokenStore.revoke(rawRefreshToken);
+    }
+
+    /** Always behaves identically whether or not the email is registered — an error response here
+     * would let a caller enumerate registered accounts one guess at a time. */
+    public void forgotPassword(ForgotPasswordRequest request) {
+        userRepository.findByEmail(request.email()).ifPresent(user -> {
+            String token = passwordResetTokenStore.issue(user.getId());
+            String resetUrl = emailProperties.appBaseUrl() + "/reset-password?token=" + token;
+            emailService.send(
+                    user.getEmail(),
+                    "Reset your Instaclone password",
+                    "Someone requested a password reset for your Instaclone account.\n\n"
+                            + "If this was you, reset your password here (this link expires in 1 hour):\n"
+                            + resetUrl
+                            + "\n\nIf you didn't request this, you can safely ignore this email.");
+        });
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        Long userId = passwordResetTokenStore
+                .consume(request.token())
+                .orElseThrow(() -> new UnauthorizedException("This reset link is invalid or has expired"));
+        User user = userRepository.findById(userId).orElseThrow(() -> new UnauthorizedException("User no longer exists"));
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.setUpdatedAt(Instant.now());
     }
 
     private AuthResult issueTokens(User user) {

@@ -8,7 +8,10 @@ public record UserProfileResponse(
         String profilePictureUrl,
         boolean isPrivate,
         boolean isVerified,
+        boolean isBusiness,
         long postCount,
         long followerCount,
         long followingCount,
-        ViewerRelationship viewerRelationship) {}
+        ViewerRelationship viewerRelationship,
+        boolean viewerHasBlocked,
+        boolean viewerHasRestricted) {}

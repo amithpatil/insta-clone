@@ -21,6 +21,7 @@ export type IconName =
   | 'volumeOn'
   | 'volumeOff'
   | 'trash'
+  | 'carousel'
 
 interface IconDef {
   /** Rendered with stroke, fill="none" — the default nav/action state. */
@@ -114,5 +115,8 @@ export const ICONS: Record<IconName, IconDef> = {
   },
   trash: {
     outline: 'M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13',
+  },
+  carousel: {
+    outline: 'M7 2h13a2 2 0 0 1 2 2v13M4 7h13a2 2 0 0 1 2 2v13H6a2 2 0 0 1-2-2Z',
   },
 }

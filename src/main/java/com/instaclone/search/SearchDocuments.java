@@ -17,6 +17,7 @@ public final class SearchDocuments {
         fields.put("username", user.getUsername());
         fields.put("fullName", user.getFullName());
         fields.put("profilePictureUrl", user.getProfilePictureUrl());
+        fields.put("isVerified", user.isVerified());
         return fields;
     }
 

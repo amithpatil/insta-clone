@@ -4,6 +4,7 @@ import { useCursorInfiniteQuery } from '@/lib/hooks/useCursorInfiniteQuery'
 import { useInfiniteScrollSentinel } from '@/lib/hooks/useInfiniteScrollSentinel'
 import { queryKeys } from '@/lib/queryKeys'
 import { StoriesTray } from './StoriesTray'
+import { SuggestionsSidebar } from './SuggestionsSidebar'
 import styles from './HomeFeedPage.module.css'
 
 export function HomeFeedPage() {
@@ -31,6 +32,7 @@ export function HomeFeedPage() {
         )}
         <div ref={sentinelRef} className={styles.sentinel} />
       </div>
+      <SuggestionsSidebar />
     </div>
   )
 }

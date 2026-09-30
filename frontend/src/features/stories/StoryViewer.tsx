@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { Avatar } from '@/components/Avatar'
 import { Icon } from '@/components/Icon'
 import { useAuth } from '@/contexts/useAuth'
+import { AddToHighlightSheet } from '@/features/highlights/AddToHighlightSheet'
+import { CreateHighlightModal } from '@/features/highlights/CreateHighlightModal'
 import * as storiesApi from '@/lib/api/endpoints/stories'
 import { formatRelativeTime } from '@/lib/formatters/relativeTime'
 import { queryKeys } from '@/lib/queryKeys'
@@ -18,6 +20,8 @@ export interface StoryViewerProps {
 export function StoryViewer({ groups, initialGroupIndex, onClose }: StoryViewerProps) {
   const [groupIndex, setGroupIndex] = useState(initialGroupIndex)
   const [storyIndex, setStoryIndex] = useState(0)
+  const [showAddToHighlight, setShowAddToHighlight] = useState(false)
+  const [creatingHighlightForStory, setCreatingHighlightForStory] = useState(false)
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -81,6 +85,16 @@ export function StoryViewer({ groups, initialGroupIndex, onClose }: StoryViewerP
           <span className={styles.timestamp}>{formatRelativeTime(story.createdAt)}</span>
           <div className={styles.headerActions}>
             {isOwn ? (
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => setShowAddToHighlight(true)}
+                aria-label="Add to highlight"
+              >
+                <Icon name="create" />
+              </button>
+            ) : null}
+            {isOwn ? (
               <button type="button" className={styles.iconButton} onClick={() => deleteMutation.mutate(story.id)} aria-label="Delete story">
                 <Icon name="trash" />
               </button>
@@ -94,6 +108,20 @@ export function StoryViewer({ groups, initialGroupIndex, onClose }: StoryViewerP
         <button type="button" className={[styles.navZone, styles.navZoneLeft].join(' ')} onClick={goToPreviousStory} aria-label="Previous story" />
         <button type="button" className={[styles.navZone, styles.navZoneRight].join(' ')} onClick={goToNextStory} aria-label="Next story" />
       </div>
+      {showAddToHighlight ? (
+        <AddToHighlightSheet
+          storyId={story.id}
+          username={story.author.username}
+          onClose={() => setShowAddToHighlight(false)}
+          onCreateNew={() => {
+            setShowAddToHighlight(false)
+            setCreatingHighlightForStory(true)
+          }}
+        />
+      ) : null}
+      {creatingHighlightForStory ? (
+        <CreateHighlightModal storyId={story.id} onClose={() => setCreatingHighlightForStory(false)} />
+      ) : null}
     </div>
   )
 }

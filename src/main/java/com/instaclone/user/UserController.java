@@ -4,6 +4,7 @@ import com.instaclone.common.CursorPage;
 import com.instaclone.common.PageParams;
 import com.instaclone.common.SecurityUtils;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +23,17 @@ public class UserController {
 
     public UserController(UserService userService) {
         this.userService = userService;
+    }
+
+    @GetMapping("/me/insights")
+    public InsightsResponse getInsights(@AuthenticationPrincipal Jwt jwt) {
+        return userService.getInsights(SecurityUtils.currentUserId(jwt));
+    }
+
+    @GetMapping("/suggestions")
+    public List<UserSummary> getSuggestions(
+            @RequestParam(required = false) Integer limit, @AuthenticationPrincipal Jwt jwt) {
+        return userService.getSuggestions(SecurityUtils.currentUserId(jwt), PageParams.clamp(limit));
     }
 
     @GetMapping("/{username}")

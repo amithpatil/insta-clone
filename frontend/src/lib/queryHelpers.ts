@@ -41,3 +41,25 @@ export function patchPostInAllCaches(queryClient: QueryClient, postId: number, p
     return data
   })
 }
+
+/** Same predicate-over-every-cached-shape approach as patchPostInAllCaches, but removes the post
+ * instead of patching it — used after a successful delete so it disappears from feed/grid/detail
+ * caches immediately without a forced refetch. */
+export function removePostFromAllCaches(queryClient: QueryClient, postId: number) {
+  queryClient.setQueriesData({ predicate: () => true }, (data: unknown) => {
+    if (isInfiniteData(data)) {
+      return {
+        ...data,
+        pages: data.pages.map((page) =>
+          isCursorPage(page)
+            ? { ...page, items: (page.items as Post[]).filter((post) => post.id !== postId) }
+            : page,
+        ),
+      }
+    }
+    if (isCursorPage(data)) {
+      return { ...data, items: (data.items as Post[]).filter((post) => post.id !== postId) }
+    }
+    return data
+  })
+}

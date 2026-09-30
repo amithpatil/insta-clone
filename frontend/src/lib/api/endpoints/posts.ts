@@ -8,7 +8,12 @@ export interface CreateUploadUrlRequest {
 export interface CreatePostRequest {
   caption?: string
   location?: string
-  media: { url: string; width?: number; height?: number }
+  media: { url: string; width?: number; height?: number }[]
+}
+
+export interface UpdatePostRequest {
+  caption?: string
+  location?: string
 }
 
 export function createUploadUrl(body: CreateUploadUrlRequest) {
@@ -21,6 +26,10 @@ export function createPost(body: CreatePostRequest) {
 
 export function getPost(id: number) {
   return apiFetch<Post>(`/posts/${id}`)
+}
+
+export function updatePost(id: number, body: UpdatePostRequest) {
+  return apiFetch<Post>(`/posts/${id}`, { method: 'PATCH', body })
 }
 
 export function deletePost(id: number) {

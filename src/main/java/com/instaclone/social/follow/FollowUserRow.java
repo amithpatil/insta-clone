@@ -15,4 +15,6 @@ public interface FollowUserRow {
     String getFullName();
 
     String getProfilePictureUrl();
+
+    boolean getIsVerified();
 }

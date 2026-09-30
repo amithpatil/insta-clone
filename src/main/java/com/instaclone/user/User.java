@@ -46,6 +46,9 @@ public class User {
     @Column(name = "is_verified", nullable = false)
     private boolean isVerified = false;
 
+    @Column(name = "is_business", nullable = false)
+    private boolean isBusiness = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

@@ -27,8 +27,15 @@
 }
 
 .username {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-regular);
+}
+
+.verifiedBadge {
+  flex-shrink: 0;
 }
 
 .actions {

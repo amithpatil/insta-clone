@@ -166,7 +166,10 @@ class MessagingNotificationIntegrationTest {
         String fakeUrl = storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/posts/fake/" + caption.hashCode() + ".jpg";
         Map<String, Object> media = Map.of("url", fakeUrl, "width", 800, "height", 600);
         ResponseEntity<Map> response = rest.exchange(
-                "/posts", HttpMethod.POST, new HttpEntity<>(Map.of("caption", caption, "media", media), bearer(token)), Map.class);
+                "/posts",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of("caption", caption, "media", List.of(media)), bearer(token)),
+                Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         return (Number) response.getBody().get("id");
     }

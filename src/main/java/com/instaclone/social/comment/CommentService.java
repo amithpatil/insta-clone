@@ -11,6 +11,7 @@ import com.instaclone.post.Post;
 import com.instaclone.post.PostRepository;
 import com.instaclone.social.like.LikeRepository;
 import com.instaclone.social.like.LikeableType;
+import com.instaclone.social.moderation.ModerationService;
 import com.instaclone.user.ProfileVisibilityService;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
@@ -33,6 +34,7 @@ public class CommentService {
     private final UserRepository userRepository;
     private final LikeRepository likeRepository;
     private final ProfileVisibilityService profileVisibilityService;
+    private final ModerationService moderationService;
     private final ApplicationEventPublisher eventPublisher;
 
     public CommentService(
@@ -41,12 +43,14 @@ public class CommentService {
             UserRepository userRepository,
             LikeRepository likeRepository,
             ProfileVisibilityService profileVisibilityService,
+            ModerationService moderationService,
             ApplicationEventPublisher eventPublisher) {
         this.commentRepository = commentRepository;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.likeRepository = likeRepository;
         this.profileVisibilityService = profileVisibilityService;
+        this.moderationService = moderationService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -104,7 +108,18 @@ public class CommentService {
         Map<Long, UserSummary> authorsById = userRepository.findAllById(authorIds).stream()
                 .collect(Collectors.toMap(User::getId, UserSummary::from));
 
+        Long postOwnerId = post.getUser().getId();
         List<CommentResponse> items = page.items().stream()
+                // A comment from someone the post's owner has restricted is hidden from every
+                // viewer except the restricted author themselves and the post owner reviewing it —
+                // the author never finds out, matching real Instagram's silent restrict behavior.
+                .filter(c -> {
+                    Long authorId = c.getUser().getId();
+                    if (viewerId.equals(authorId) || viewerId.equals(postOwnerId)) {
+                        return true;
+                    }
+                    return !moderationService.isRestrictedBy(postOwnerId, authorId);
+                })
                 .map(c -> toResponse(c, authorsById.get(c.getUser().getId())))
                 .toList();
         return new CursorPage<>(items, page.nextCursor(), page.hasMore());

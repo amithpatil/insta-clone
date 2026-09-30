@@ -31,6 +31,9 @@
 }
 
 .username {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-sm);
 }

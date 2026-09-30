@@ -39,7 +39,7 @@ class CoreSocialGraphIntegrationTest {
 
         Map<String, Object> media = Map.of(
                 "url", "http://localhost:8333/instaclone-media/posts/test.jpg", "width", 800, "height", 600);
-        Map<String, Object> createPost = Map.of("caption", "hello world", "media", media);
+        Map<String, Object> createPost = Map.of("caption", "hello world", "media", List.of(media));
         ResponseEntity<Map> postResponse =
                 rest.exchange("/posts", HttpMethod.POST, new HttpEntity<>(createPost, bearer(aliceToken)), Map.class);
         assertThat(postResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);

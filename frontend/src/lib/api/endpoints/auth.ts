@@ -28,3 +28,11 @@ export function refresh() {
 export function logout() {
   return apiFetch<void>('/auth/logout', { method: 'POST' })
 }
+
+export function forgotPassword(email: string) {
+  return apiFetch<void>('/auth/forgot-password', { method: 'POST', body: { email } })
+}
+
+export function resetPassword(token: string, newPassword: string) {
+  return apiFetch<void>('/auth/reset-password', { method: 'POST', body: { token, newPassword } })
+}

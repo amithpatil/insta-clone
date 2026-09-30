@@ -22,10 +22,15 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
             nativeQuery = true)
     List<Long> findAcceptedFolloweeIds(@Param("followerId") Long followerId);
 
+    /** Both ACCEPTED and PENDING — for excluding accounts already followed or already requested
+     * from "suggested for you," not just accepted follows. */
+    @Query(value = "SELECT followee_id FROM follows WHERE follower_id = :followerId", nativeQuery = true)
+    List<Long> findAllFolloweeIds(@Param("followerId") Long followerId);
+
     @Query(
             value =
                     "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "
-                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl "
+                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl, u.is_verified AS isVerified "
                             + "FROM follows f JOIN users u ON u.id = f.follower_id "
                             + "WHERE f.followee_id = :userId AND f.status = 'ACCEPTED' "
                             + "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit",
@@ -35,7 +40,7 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
     @Query(
             value =
                     "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "
-                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl "
+                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl, u.is_verified AS isVerified "
                             + "FROM follows f JOIN users u ON u.id = f.follower_id "
                             + "WHERE f.followee_id = :userId AND f.status = 'ACCEPTED' "
                             + "AND (f.created_at, f.id) < (:cursorCreatedAt, :cursorId) "
@@ -50,7 +55,7 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
     @Query(
             value =
                     "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "
-                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl "
+                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl, u.is_verified AS isVerified "
                             + "FROM follows f JOIN users u ON u.id = f.followee_id "
                             + "WHERE f.follower_id = :userId AND f.status = 'ACCEPTED' "
                             + "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit",
@@ -60,7 +65,7 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
     @Query(
             value =
                     "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "
-                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl "
+                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl, u.is_verified AS isVerified "
                             + "FROM follows f JOIN users u ON u.id = f.followee_id "
                             + "WHERE f.follower_id = :userId AND f.status = 'ACCEPTED' "
                             + "AND (f.created_at, f.id) < (:cursorCreatedAt, :cursorId) "

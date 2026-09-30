@@ -1,34 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
 import { CaptionText } from '@/components/CaptionText'
 import { Icon } from '@/components/Icon'
+import { MediaCarousel } from '@/components/MediaCarousel'
+import { PostOptionsMenu } from '@/components/PostOptionsMenu'
 import * as commentsApi from '@/lib/api/endpoints/comments'
 import * as postsApi from '@/lib/api/endpoints/posts'
 import { formatCount, formatRelativeTime } from '@/lib/formatters/relativeTime'
 import { useLikeMutation } from '@/lib/hooks/useLikeMutation'
+import { useSaveMutation } from '@/lib/hooks/useSaveMutation'
 import { patchPostInAllCaches } from '@/lib/queryHelpers'
 import { queryKeys } from '@/lib/queryKeys'
-import { CommentList } from './CommentList'
+import { CommentList, type ReplyTarget } from './CommentList'
 import styles from './PostDetail.module.css'
 
 export function PostDetail({ postId }: { postId: number }) {
+  const navigate = useNavigate()
   const { data: post, isLoading } = useQuery({
     queryKey: queryKeys.post(postId),
     queryFn: () => postsApi.getPost(postId),
   })
   const [commentText, setCommentText] = useState('')
-  const [saved, setSaved] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<ReplyTarget | null>(null)
   const queryClient = useQueryClient()
 
   const likeMutation = useLikeMutation(postId, post?.likedByViewer ?? false, post?.likeCount ?? 0)
+  const saveMutation = useSaveMutation(postId, post?.savedByViewer ?? false)
   const commentMutation = useMutation({
-    mutationFn: (text: string) => commentsApi.createComment(postId, { text }),
+    mutationFn: (input: { text: string; parentCommentId?: number }) =>
+      commentsApi.createComment(postId, input),
     onSuccess: () => {
       if (post) patchPostInAllCaches(queryClient, postId, { commentCount: post.commentCount + 1 })
       queryClient.invalidateQueries({ queryKey: queryKeys.comments(postId) })
       setCommentText('')
+      setReplyingTo(null)
     },
   })
 
@@ -36,24 +43,16 @@ export function PostDetail({ postId }: { postId: number }) {
     return <div className={styles.layout} />
   }
 
-  const primaryMedia = post.media[0]
-
   function handleSubmitComment() {
     const text = commentText.trim()
     if (!text) return
-    commentMutation.mutate(text)
+    commentMutation.mutate({ text, parentCommentId: replyingTo?.id })
   }
 
   return (
     <div className={styles.layout}>
       <div className={styles.media}>
-        {primaryMedia ? (
-          primaryMedia.mediaType === 'VIDEO' ? (
-            <video src={primaryMedia.url} poster={primaryMedia.thumbnailUrl ?? undefined} controls autoPlay muted />
-          ) : (
-            <img src={primaryMedia.url} alt={post.caption || `Post by ${post.author.username}`} />
-          )
-        ) : null}
+        <MediaCarousel media={post.media} alt={post.caption || `Post by ${post.author.username}`} autoPlayVideo />
       </div>
       <div className={styles.side}>
         <header className={styles.header}>
@@ -63,9 +62,7 @@ export function PostDetail({ postId }: { postId: number }) {
           <Link to={`/${post.author.username}`} className={styles.username}>
             {post.author.username}
           </Link>
-          <button type="button" aria-label="More options">
-            <Icon name="options" />
-          </button>
+          <PostOptionsMenu post={post} onDeleted={() => navigate(-1)} />
         </header>
 
         {post.caption ? (
@@ -81,7 +78,7 @@ export function PostDetail({ postId }: { postId: number }) {
           </div>
         ) : null}
 
-        <CommentList postId={postId} />
+        <CommentList postId={postId} onReply={setReplyingTo} />
 
         <div className={styles.footer}>
           <div className={styles.actions}>
@@ -103,11 +100,11 @@ export function PostDetail({ postId }: { postId: number }) {
             <button
               type="button"
               className={[styles.actionButton, styles.bookmark].join(' ')}
-              onClick={() => setSaved((s) => !s)}
-              aria-pressed={saved}
-              aria-label={saved ? 'Remove from saved' : 'Save'}
+              onClick={() => saveMutation.mutate()}
+              aria-pressed={post.savedByViewer}
+              aria-label={post.savedByViewer ? 'Remove from saved' : 'Save'}
             >
-              <Icon name="bookmark" variant={saved ? 'filled' : 'outline'} />
+              <Icon name="bookmark" variant={post.savedByViewer ? 'filled' : 'outline'} />
             </button>
           </div>
           <p className={styles.likeCount}>
@@ -116,10 +113,18 @@ export function PostDetail({ postId }: { postId: number }) {
           <time className={styles.timestamp} dateTime={post.createdAt}>
             {formatRelativeTime(post.createdAt)}
           </time>
+          {replyingTo ? (
+            <div className={styles.replyingToChip}>
+              Replying to <strong>@{replyingTo.username}</strong>
+              <button type="button" onClick={() => setReplyingTo(null)} aria-label="Cancel reply">
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          ) : null}
           <div className={styles.composer}>
             <input
               className={styles.composerInput}
-              placeholder="Add a comment…"
+              placeholder={replyingTo ? `Reply to @${replyingTo.username}…` : 'Add a comment…'}
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               onKeyDown={(e) => {

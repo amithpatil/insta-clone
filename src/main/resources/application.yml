@@ -49,6 +49,13 @@ app:
   cors:
     allowed-origins:
       - http://localhost:5173
+  email:
+    # Unset by default — EmailConfig falls back to logging the email instead of sending it (see
+    # LoggingEmailService). Set RESEND_API_KEY to send real password-reset emails via Resend
+    # (resend.com); RESEND_FROM_ADDRESS must be a verified sender/domain on that account.
+    resend-api-key: ${RESEND_API_KEY:}
+    from-address: ${RESEND_FROM_ADDRESS:onboarding@resend.dev}
+    app-base-url: ${APP_BASE_URL:http://localhost:5173}
 
 management:
   endpoints:

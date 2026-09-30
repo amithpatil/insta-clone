@@ -55,7 +55,9 @@ export function LoginPage() {
           Log in
         </Button>
       </form>
-      <p className={styles.forgot}>Forgot password?</p>
+      <Link to="/forgot-password" className={styles.forgot}>
+        Forgot password?
+      </Link>
     </AuthLayout>
   )
 }

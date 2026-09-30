@@ -30,7 +30,8 @@ public class SearchService {
                 Long.valueOf((String) hit.get("id")),
                 (String) hit.get("username"),
                 (String) hit.get("fullName"),
-                (String) hit.get("profilePictureUrl"));
+                (String) hit.get("profilePictureUrl"),
+                Boolean.TRUE.equals(hit.get("isVerified")));
     }
 
     @SuppressWarnings("unchecked")

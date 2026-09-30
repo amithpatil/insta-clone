@@ -21,6 +21,7 @@ export interface UserSummary {
   username: string
   fullName: string | null
   profilePictureUrl: string | null
+  isVerified: boolean
 }
 
 export type ViewerRelationship = 'SELF' | 'FOLLOWING' | 'REQUESTED' | 'NOT_FOLLOWING'
@@ -33,10 +34,13 @@ export interface UserProfile {
   profilePictureUrl: string | null
   isPrivate: boolean
   isVerified: boolean
+  isBusiness: boolean
   postCount: number
   followerCount: number
   followingCount: number
   viewerRelationship: ViewerRelationship
+  viewerHasBlocked: boolean
+  viewerHasRestricted: boolean
 }
 
 export interface AuthTokens {
@@ -72,6 +76,7 @@ export interface Post {
   likeCount: number
   commentCount: number
   likedByViewer: boolean
+  savedByViewer: boolean
   createdAt: string
   media: Media[]
   hashtags: string[]
@@ -111,6 +116,31 @@ export interface Story {
   createdAt: string
 }
 
+export interface Insights {
+  postCount: number
+  followerCount: number
+  followingCount: number
+  totalLikes: number
+  totalComments: number
+}
+
+export interface StoryHighlight {
+  id: number
+  title: string
+  coverUrl: string | null
+  createdAt: string
+}
+
+export interface StoryHighlightItem {
+  id: number
+  mediaUrl: string
+  createdAt: string
+}
+
+export interface StoryHighlightDetail extends StoryHighlight {
+  items: StoryHighlightItem[]
+}
+
 export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW'
 
 export interface Notification {
@@ -144,6 +174,7 @@ export interface UserSearchResult {
   username: string
   fullName: string | null
   profilePictureUrl: string | null
+  isVerified: boolean
 }
 
 export interface PostSearchResult {

@@ -1,13 +1,20 @@
 import { Link } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import * as commentsApi from '@/lib/api/endpoints/comments'
+import type { Comment } from '@/lib/api/types'
 import { formatRelativeTime } from '@/lib/formatters/relativeTime'
 import { useCursorInfiniteQuery } from '@/lib/hooks/useCursorInfiniteQuery'
 import { useInfiniteScrollSentinel } from '@/lib/hooks/useInfiniteScrollSentinel'
 import { queryKeys } from '@/lib/queryKeys'
 import styles from './CommentList.module.css'
 
-export function CommentList({ postId }: { postId: number }) {
+export interface ReplyTarget {
+  id: number
+  username: string
+}
+
+export function CommentList({ postId, onReply }: { postId: number; onReply: (target: ReplyTarget) => void }) {
   const { items, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useCursorInfiniteQuery(
     queryKeys.comments(postId),
     (cursor) => commentsApi.getComments(postId, cursor),
@@ -26,32 +33,75 @@ export function CommentList({ postId }: { postId: number }) {
     )
   }
 
+  const repliesByParent = new Map<number, Comment[]>()
+  const topLevel: Comment[] = []
+  for (const comment of items) {
+    if (comment.parentCommentId == null) {
+      topLevel.push(comment)
+    } else {
+      const list = repliesByParent.get(comment.parentCommentId) ?? []
+      list.push(comment)
+      repliesByParent.set(comment.parentCommentId, list)
+    }
+  }
+
   return (
     <div className={styles.list}>
-      {items.map((comment) => (
-        <div key={comment.id} className={styles.row}>
-          <Link to={`/${comment.author.username}`}>
-            <Avatar src={comment.author.profilePictureUrl} alt={comment.author.username} size={24} />
-          </Link>
-          <div>
-            <p className={styles.text}>
-              <Link to={`/${comment.author.username}`} className={styles.username}>
-                {comment.author.username}
-              </Link>
-              {comment.text}
-            </p>
-            <div className={styles.meta}>
-              <span className={styles.timestamp}>{formatRelativeTime(comment.createdAt)}</span>
-              {comment.likeCount > 0 ? (
-                <span className={styles.likeCount}>
-                  {comment.likeCount} {comment.likeCount === 1 ? 'like' : 'likes'}
-                </span>
-              ) : null}
-            </div>
-          </div>
-        </div>
+      {topLevel.map((comment) => (
+        <CommentRow key={comment.id} comment={comment} onReply={onReply} replies={repliesByParent.get(comment.id)} />
       ))}
       <div ref={sentinelRef} className={styles.sentinel} />
+    </div>
+  )
+}
+
+function CommentRow({
+  comment,
+  replies,
+  onReply,
+  isReply = false,
+}: {
+  comment: Comment
+  replies?: Comment[]
+  onReply: (target: ReplyTarget) => void
+  isReply?: boolean
+}) {
+  return (
+    <div className={isReply ? styles.replyRow : styles.row}>
+      <Link to={`/${comment.author.username}`}>
+        <Avatar src={comment.author.profilePictureUrl} alt={comment.author.username} size={24} />
+      </Link>
+      <div>
+        <p className={styles.text}>
+          <Link to={`/${comment.author.username}`} className={styles.username}>
+            {comment.author.username}
+            {comment.author.isVerified ? <VerifiedBadge size={11} className={styles.verifiedBadge} /> : null}
+          </Link>
+          {comment.text}
+        </p>
+        <div className={styles.meta}>
+          <span className={styles.timestamp}>{formatRelativeTime(comment.createdAt)}</span>
+          {comment.likeCount > 0 ? (
+            <span className={styles.likeCount}>
+              {comment.likeCount} {comment.likeCount === 1 ? 'like' : 'likes'}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className={styles.replyButton}
+            onClick={() => onReply({ id: comment.id, username: comment.author.username })}
+          >
+            Reply
+          </button>
+        </div>
+        {replies && replies.length > 0 ? (
+          <div className={styles.replies}>
+            {replies.map((reply) => (
+              <CommentRow key={reply.id} comment={reply} onReply={onReply} isReply />
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }

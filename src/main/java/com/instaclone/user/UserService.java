@@ -11,7 +11,9 @@ import com.instaclone.search.SearchIndexEvent;
 import com.instaclone.social.follow.FollowRepository;
 import com.instaclone.social.follow.FollowStatus;
 import com.instaclone.social.follow.FollowUserRow;
+import com.instaclone.social.moderation.ModerationService;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ public class UserService {
     private final FollowRepository followRepository;
     private final PostRepository postRepository;
     private final ProfileVisibilityService profileVisibilityService;
+    private final ModerationService moderationService;
     private final ApplicationEventPublisher eventPublisher;
     private final SearchProperties searchProperties;
 
@@ -32,12 +35,14 @@ public class UserService {
             FollowRepository followRepository,
             PostRepository postRepository,
             ProfileVisibilityService profileVisibilityService,
+            ModerationService moderationService,
             ApplicationEventPublisher eventPublisher,
             SearchProperties searchProperties) {
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.postRepository = postRepository;
         this.profileVisibilityService = profileVisibilityService;
+        this.moderationService = moderationService;
         this.eventPublisher = eventPublisher;
         this.searchProperties = searchProperties;
     }
@@ -52,6 +57,13 @@ public class UserService {
 
     public UserProfileResponse getProfile(String username, Long viewerId) {
         User target = findByUsernameOrThrow(username);
+        // A block hides the account entirely (looks like it doesn't exist) for the blocked party,
+        // unlike a private account (which still shows its header + a gate) — but directional, not
+        // mutual: the person who did the blocking keeps full profile access so they can still
+        // reach the Unblock action.
+        if (viewerId != null && moderationService.isBlockedBy(target.getId(), viewerId)) {
+            throw new NotFoundException("User not found");
+        }
         return toProfileResponse(target, viewerId);
     }
 
@@ -71,6 +83,9 @@ public class UserService {
         if (request.isPrivate() != null) {
             user.setPrivate(request.isPrivate());
         }
+        if (request.isBusiness() != null) {
+            user.setBusiness(request.isBusiness());
+        }
         user.setUpdatedAt(Instant.now());
         eventPublisher.publishEvent(SearchIndexEvent.upsert(
                 searchProperties.usersIndex(), String.valueOf(user.getId()), SearchDocuments.forUser(user)));
@@ -85,6 +100,20 @@ public class UserService {
         return toProfileResponse(user, userId);
     }
 
+    @Transactional(readOnly = true)
+    public InsightsResponse getInsights(Long userId) {
+        User user = findByIdOrThrow(userId);
+        if (!user.isBusiness()) {
+            throw new ForbiddenException("Insights are only available for business accounts");
+        }
+        long postCount = postRepository.countByUserId(userId);
+        long followerCount = followRepository.countByFolloweeIdAndStatus(userId, FollowStatus.ACCEPTED);
+        long followingCount = followRepository.countByFollowerIdAndStatus(userId, FollowStatus.ACCEPTED);
+        long totalLikes = postRepository.sumLikeCountByUserId(userId);
+        long totalComments = postRepository.sumCommentCountByUserId(userId);
+        return new InsightsResponse(postCount, followerCount, followingCount, totalLikes, totalComments);
+    }
+
     public CursorPage<UserSummary> getFollowers(String username, Long viewerId, String cursor, int limit) {
         User target = findByUsernameOrThrow(username);
         assertVisible(target, viewerId);
@@ -94,6 +123,19 @@ public class UserService {
                 : followRepository.findPageFollowersAfterCursor(
                         target.getId(), decoded.createdAt(), decoded.id(), limit + 1);
         return toUserSummaryPage(rows, limit);
+    }
+
+    /** "Suggested for you" — public accounts the viewer doesn't already follow (or has a pending
+     * request to), isn't blocked with, ranked by follower count. No pagination (a short, static
+     * list for a sidebar), unlike every other listing here. */
+    @Transactional(readOnly = true)
+    public List<UserSummary> getSuggestions(Long viewerId, int limit) {
+        List<Long> excludedIds = new ArrayList<>(followRepository.findAllFolloweeIds(viewerId));
+        excludedIds.add(viewerId);
+        excludedIds.addAll(moderationService.getBlockedEitherDirectionIds(viewerId));
+        return userRepository.findSuggestions(excludedIds, limit).stream()
+                .map(UserSummary::from)
+                .toList();
     }
 
     public CursorPage<UserSummary> getFollowing(String username, Long viewerId, String cursor, int limit) {
@@ -118,7 +160,8 @@ public class UserService {
         CursorPage<FollowUserRow> page =
                 CursorPage.of(rows, limit, r -> new Cursor(r.getFollowCreatedAt(), r.getFollowId()).encode());
         List<UserSummary> items = page.items().stream()
-                .map(r -> new UserSummary(r.getUserId(), r.getUsername(), r.getFullName(), r.getProfilePictureUrl()))
+                .map(r -> new UserSummary(
+                        r.getUserId(), r.getUsername(), r.getFullName(), r.getProfilePictureUrl(), r.getIsVerified()))
                 .toList();
         return new CursorPage<>(items, page.nextCursor(), page.hasMore());
     }
@@ -129,6 +172,8 @@ public class UserService {
         long followingCount = followRepository.countByFollowerIdAndStatus(target.getId(), FollowStatus.ACCEPTED);
 
         ViewerRelationship relationship = ViewerRelationship.NOT_FOLLOWING;
+        boolean viewerHasBlocked = false;
+        boolean viewerHasRestricted = false;
         if (viewerId != null) {
             if (viewerId.equals(target.getId())) {
                 relationship = ViewerRelationship.SELF;
@@ -139,6 +184,8 @@ public class UserService {
                                 ? ViewerRelationship.FOLLOWING
                                 : ViewerRelationship.REQUESTED)
                         .orElse(ViewerRelationship.NOT_FOLLOWING);
+                viewerHasBlocked = moderationService.isBlockedEitherDirection(viewerId, target.getId());
+                viewerHasRestricted = moderationService.isRestrictedBy(viewerId, target.getId());
             }
         }
 
@@ -150,9 +197,12 @@ public class UserService {
                 target.getProfilePictureUrl(),
                 target.isPrivate(),
                 target.isVerified(),
+                target.isBusiness(),
                 postCount,
                 followerCount,
                 followingCount,
-                relationship);
+                relationship,
+                viewerHasBlocked,
+                viewerHasRestricted);
     }
 }

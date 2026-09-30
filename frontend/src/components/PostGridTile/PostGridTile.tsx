@@ -15,6 +15,8 @@ export function PostGridTile({ post }: { post: Post }) {
       ) : null}
       {post.type === 'REEL' || post.type === 'VIDEO' ? (
         <Icon name="video" variant="filled" size={18} className={styles.typeBadge} />
+      ) : post.type === 'CAROUSEL' ? (
+        <Icon name="carousel" size={18} className={styles.typeBadge} />
       ) : null}
       <div className={styles.overlay}>
         <span className={styles.stat}>

@@ -5,6 +5,7 @@ import com.instaclone.common.Cursor;
 import com.instaclone.common.CursorPage;
 import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
+import com.instaclone.social.moderation.ModerationService;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
 import com.instaclone.user.UserSummary;
@@ -36,16 +37,19 @@ public class MessageService {
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final ModerationService moderationService;
     private final ApplicationEventPublisher eventPublisher;
 
     public MessageService(
             ConversationRepository conversationRepository,
             MessageRepository messageRepository,
             UserRepository userRepository,
+            ModerationService moderationService,
             ApplicationEventPublisher eventPublisher) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
+        this.moderationService = moderationService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -64,6 +68,11 @@ public class MessageService {
         List<User> others = found.stream().filter(u -> !u.getId().equals(creatorId)).distinct().toList();
         if (others.isEmpty()) {
             throw new BadRequestException("A conversation needs at least one other participant");
+        }
+        boolean anyBlocked = others.stream()
+                .anyMatch(u -> moderationService.isBlockedEitherDirection(creatorId, u.getId()));
+        if (anyBlocked) {
+            throw new ForbiddenException("You can't start a conversation with a blocked account");
         }
 
         Conversation conversation;

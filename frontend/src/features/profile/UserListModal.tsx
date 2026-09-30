@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
 import { Modal } from '@/components/Modal'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import * as usersApi from '@/lib/api/endpoints/users'
 import { useCursorInfiniteQuery } from '@/lib/hooks/useCursorInfiniteQuery'
 import { useInfiniteScrollSentinel } from '@/lib/hooks/useInfiniteScrollSentinel'
@@ -42,7 +43,10 @@ export function UserListModal({ mode }: { mode: 'followers' | 'following' }) {
             <Link key={user.id} to={`/${user.username}`} className={styles.row}>
               <Avatar src={user.profilePictureUrl} alt={user.username} size={44} />
               <div className={styles.rowText}>
-                <span className={styles.username}>{user.username}</span>
+                <span className={styles.username}>
+                  {user.username}
+                  {user.isVerified ? <VerifiedBadge size={12} /> : null}
+                </span>
                 <span className={styles.fullName}>{user.fullName}</span>
               </div>
             </Link>

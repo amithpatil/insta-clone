@@ -98,7 +98,7 @@ public class ReelService {
         // transcoding reel behind PostRepository.READY_FILTER; search must respect the same rule.
         eventPublisher.publishEvent(new MediaUploadedEvent(media.getId(), post.getId(), sourceObjectKey, userId));
 
-        return postService.toResponse(post, UserSummary.from(author), List.of(media), false);
+        return postService.toResponse(post, UserSummary.from(author), List.of(media), false, false);
     }
 
     /** Follows-based, mirroring FeedService.getHomeFeed exactly but filtered to type=REEL + status=READY. */

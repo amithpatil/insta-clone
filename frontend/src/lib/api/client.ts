@@ -1,4 +1,4 @@
-import type { ProblemDetail } from './types'
+import type { ProblemDetail, UserSummary } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string
 
@@ -43,7 +43,7 @@ const AUTH_ENDPOINTS = ['/auth/login', '/auth/register', '/auth/refresh']
 
 interface RefreshedSession {
   accessToken: string
-  user: { id: number; username: string; fullName: string; profilePictureUrl: string }
+  user: UserSummary
 }
 
 let refreshPromise: Promise<RefreshedSession> | null = null

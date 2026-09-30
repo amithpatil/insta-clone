@@ -102,7 +102,10 @@ class HashtagStoryIntegrationTest {
                 storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/posts/fake/" + caption.hashCode() + ".jpg";
         Map<String, Object> media = Map.of("url", fakeUrl, "width", 800, "height", 600);
         return rest.exchange(
-                "/posts", HttpMethod.POST, new HttpEntity<>(Map.of("caption", caption, "media", media), bearer(token)), Map.class);
+                "/posts",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of("caption", caption, "media", List.of(media)), bearer(token)),
+                Map.class);
     }
 
     private String register(String username, String email) {

@@ -2,6 +2,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import { Icon } from '@/components/Icon'
+import { ProfileOptionsMenu } from '@/components/ProfileOptionsMenu'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import type { UserProfile } from '@/lib/api/types'
 import { useFollowMutation } from '@/lib/hooks/useFollowMutation'
 import styles from './ProfileHeader.module.css'
@@ -17,34 +19,51 @@ export function ProfileHeader({ profile }: { profile: UserProfile }) {
       </div>
       <div className={styles.info}>
         <div className={styles.topRow}>
-          <h1 className={styles.username}>{profile.username}</h1>
+          <h1 className={styles.username}>
+            {profile.username}
+            {profile.isVerified ? <VerifiedBadge size={16} className={styles.verifiedBadge} /> : null}
+          </h1>
           <div className={styles.actions}>
             {profile.viewerRelationship === 'SELF' ? (
               <>
                 <Link to="/accounts/edit">
                   <Button variant="secondary">Edit profile</Button>
                 </Link>
+                {profile.isBusiness ? (
+                  <Link to="/accounts/insights">
+                    <Button variant="secondary">Insights</Button>
+                  </Link>
+                ) : null}
                 <Link to="/accounts/edit" className={styles.settingsButton} aria-label="Settings">
                   <Icon name="more" />
                 </Link>
               </>
-            ) : profile.viewerRelationship === 'FOLLOWING' ? (
-              <>
-                <Button variant="secondary" onClick={() => unfollow.mutate()} loading={unfollow.isPending}>
-                  Following
-                </Button>
-                <Link to="/direct/inbox">
-                  <Button variant="secondary">Message</Button>
-                </Link>
-              </>
-            ) : profile.viewerRelationship === 'REQUESTED' ? (
-              <Button variant="secondary" onClick={() => unfollow.mutate()} loading={unfollow.isPending}>
-                Requested
-              </Button>
+            ) : profile.viewerHasBlocked ? (
+              // A viewer can't follow/message someone they've blocked (FollowService/MessageService
+              // both reject it server-side) — the only action left is the options menu, to unblock.
+              <ProfileOptionsMenu profile={profile} className={styles.settingsButton} />
             ) : (
-              <Button onClick={() => follow.mutate()} loading={follow.isPending}>
-                Follow
-              </Button>
+              <>
+                {profile.viewerRelationship === 'FOLLOWING' ? (
+                  <>
+                    <Button variant="secondary" onClick={() => unfollow.mutate()} loading={unfollow.isPending}>
+                      Following
+                    </Button>
+                    <Link to="/direct/inbox">
+                      <Button variant="secondary">Message</Button>
+                    </Link>
+                  </>
+                ) : profile.viewerRelationship === 'REQUESTED' ? (
+                  <Button variant="secondary" onClick={() => unfollow.mutate()} loading={unfollow.isPending}>
+                    Requested
+                  </Button>
+                ) : (
+                  <Button onClick={() => follow.mutate()} loading={follow.isPending}>
+                    Follow
+                  </Button>
+                )}
+                <ProfileOptionsMenu profile={profile} className={styles.settingsButton} />
+              </>
             )}
           </div>
         </div>

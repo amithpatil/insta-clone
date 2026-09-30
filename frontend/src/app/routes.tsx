@@ -1,6 +1,8 @@
 import { Outlet, type RouteObject } from 'react-router-dom'
+import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RegisterPage } from '@/features/auth/RegisterPage'
+import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
 import { CreatePostModal } from '@/features/create-post/CreatePostModal'
 import { ExplorePage } from '@/features/explore/ExplorePage'
 import { HomeFeedPage } from '@/features/feed/HomeFeedPage'
@@ -8,6 +10,7 @@ import { HashtagPage } from '@/features/hashtag/HashtagPage'
 import { ConversationThread } from '@/features/messaging/ConversationThread'
 import { DirectInboxPage } from '@/features/messaging/DirectInboxPage'
 import { EditProfilePage } from '@/features/profile/EditProfilePage'
+import { InsightsPage } from '@/features/insights/InsightsPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { PostDetailModal } from '@/features/post-detail/PostDetailModal'
 import { PostPage } from '@/features/post-detail/PostPage'
@@ -25,6 +28,8 @@ import { RequireAuth } from './RequireAuth'
 export const routes: RouteObject[] = [
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
   {
     path: '/',
     element: (
@@ -46,6 +51,7 @@ export const routes: RouteObject[] = [
       { path: 'explore/tags/:tag', element: <HashtagPage /> },
       { path: 'p/:postId', element: <PostPage /> },
       { path: 'accounts/edit', element: <EditProfilePage /> },
+      { path: 'accounts/insights', element: <InsightsPage /> },
       { path: ':username', element: <ProfilePage /> },
       { path: ':username/followers', element: <UserListModal mode="followers" /> },
       { path: ':username/following', element: <UserListModal mode="following" /> },

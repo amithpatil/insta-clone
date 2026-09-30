@@ -39,6 +39,7 @@ function EditProfileForm({ profile }: { profile: UserProfile }) {
   const [fullName, setFullName] = useState(profile.fullName ?? '')
   const [bio, setBio] = useState(profile.bio ?? '')
   const [isPrivate, setIsPrivate] = useState(profile.isPrivate)
+  const [isBusiness, setIsBusiness] = useState(profile.isBusiness)
   const [avatarUrl, setAvatarUrl] = useState(profile.profilePictureUrl)
   const [saved, setSaved] = useState(false)
 
@@ -56,7 +57,7 @@ function EditProfileForm({ profile }: { profile: UserProfile }) {
   })
 
   const saveMutation = useMutation({
-    mutationFn: () => usersApi.updateMyProfile({ fullName, bio, isPrivate }),
+    mutationFn: () => usersApi.updateMyProfile({ fullName, bio, isPrivate, isBusiness }),
     onSuccess: (updated) => {
       updateUser({ fullName: updated.fullName })
       queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(profile.username) })
@@ -129,6 +130,24 @@ function EditProfileForm({ profile }: { profile: UserProfile }) {
               onClick={() => setIsPrivate((v) => !v)}
             >
               <span className={[styles.switchKnob, isPrivate ? styles.switchKnobOn : ''].join(' ')} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.field}>
+        <span className={styles.fieldLabel}>Business account</span>
+        <div className={styles.fieldInputWrapper}>
+          <div className={styles.toggleRow}>
+            <p className={styles.toggleDescription}>Business accounts get access to Insights — aggregate stats about your posts and audience.</p>
+            <button
+              type="button"
+              className={[styles.switch, isBusiness ? styles.switchOn : ''].join(' ')}
+              role="switch"
+              aria-checked={isBusiness}
+              onClick={() => setIsBusiness((v) => !v)}
+            >
+              <span className={[styles.switchKnob, isBusiness ? styles.switchKnobOn : ''].join(' ')} />
             </button>
           </div>
         </div>

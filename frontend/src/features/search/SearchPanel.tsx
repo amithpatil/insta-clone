@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
 import { Icon } from '@/components/Icon'
+import { VerifiedBadge } from '@/components/VerifiedBadge'
 import * as searchApi from '@/lib/api/endpoints/search'
 import type { UserSearchResult } from '@/lib/api/types'
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue'
@@ -95,7 +96,10 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
                   <Link key={user.id} to={`/${user.username}`} className={styles.row} onClick={() => recordVisit(user)}>
                     <Avatar src={user.profilePictureUrl} alt={user.username} size={44} />
                     <div className={styles.rowText}>
-                      <span className={styles.username}>{user.username}</span>
+                      <span className={styles.username}>
+                        {user.username}
+                        {user.isVerified ? <VerifiedBadge size={12} /> : null}
+                      </span>
                       <span className={styles.fullName}>{user.fullName}</span>
                     </div>
                   </Link>
@@ -112,7 +116,10 @@ export function SearchPanel({ onClose }: { onClose: () => void }) {
                 <Link key={user.id} to={`/${user.username}`} className={styles.row} onClick={() => recordVisit(user)}>
                   <Avatar src={user.profilePictureUrl} alt={user.username} size={44} />
                   <div className={styles.rowText}>
-                    <span className={styles.username}>{user.username}</span>
+                    <span className={styles.username}>
+                      {user.username}
+                      {user.isVerified ? <VerifiedBadge size={12} /> : null}
+                    </span>
                     <span className={styles.fullName}>{user.fullName}</span>
                   </div>
                 </Link>
