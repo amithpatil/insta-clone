@@ -62,4 +62,25 @@ public class User {
         }
         return viewer.getId().equals(id) || viewerFollowsThisUser;
     }
+
+    // Id-based identity, not the default reference identity — User is used as Set<User> elements
+    // (e.g. Conversation.participants), where two instances loaded in different sessions but
+    // representing the same row must be treated as equal. hashCode is a constant rather than
+    // derived from id: id is null before the first persist, and a mutable hashCode would break
+    // membership in a HashSet the entity was added to before that.
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof User other)) {
+            return false;
+        }
+        return id != null && id.equals(other.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

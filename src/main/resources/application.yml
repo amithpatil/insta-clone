@@ -11,6 +11,9 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        # Batches lazy collection loads (e.g. Conversation.participants) into one IN-query per
+        # batch instead of one query per parent row — avoids N+1 without touching call sites.
+        default_batch_fetch_size: 25
   flyway:
     enabled: true
     locations: classpath:db/migration

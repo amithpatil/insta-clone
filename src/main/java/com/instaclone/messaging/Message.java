@@ -40,9 +40,6 @@ public class Message {
     @Column(name = "media_url")
     private String mediaUrl;
 
-    @Column(name = "is_read", nullable = false)
-    private boolean read;
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 }

@@ -45,8 +45,12 @@ public class FollowService {
         follow.setCreatedAt(Instant.now());
         followRepository.save(follow);
 
-        eventPublisher.publishEvent(
-                new NotificationEvent(followee.getId(), followerId, NotificationType.FOLLOW, "USER", followerId));
+        // Only when the follow actually took effect — a private account's PENDING request isn't
+        // "followed you" yet; that notification fires from acceptFollowRequest instead.
+        if (follow.getStatus() == FollowStatus.ACCEPTED) {
+            eventPublisher.publishEvent(
+                    new NotificationEvent(followee.getId(), followerId, NotificationType.FOLLOW, "USER", followerId));
+        }
 
         return new FollowStatusResponse(follow.getStatus());
     }
@@ -67,6 +71,10 @@ public class FollowService {
                 .filter(f -> f.getStatus() == FollowStatus.PENDING)
                 .orElseThrow(() -> new NotFoundException("No pending follow request from this user"));
         follow.accept();
+
+        eventPublisher.publishEvent(
+                new NotificationEvent(follower.getId(), approverId, NotificationType.FOLLOW, "USER", approverId));
+
         return new FollowStatusResponse(follow.getStatus());
     }
 }

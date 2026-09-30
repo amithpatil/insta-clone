@@ -15,56 +15,66 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * One send path for both transports: the REST endpoint (offline-delivery fallback) and the STOMP
- * destination (live delivery) both call sendMessage — persistence and participant checks live
- * here exactly once. After persisting, every other participant gets a live push regardless of
- * which transport the sender used.
+ * destination (live delivery) both call sendMessage — persistence, validation, and participant
+ * checks live here exactly once. The live push itself is deferred to after commit (see
+ * MessageSentEvent/MessagePushPublisher) — never called directly from here — for the same reason
+ * the notification pipeline defers its Redis publish: a push must never race an uncommitted or
+ * rolled-back row.
  */
 @Service
 public class MessageService {
 
-    private static final int MAX_CONVERSATIONS = 50;
+    private static final int MAX_CONTENT_LENGTH = 1000;
+    private static final int MAX_MEDIA_URL_LENGTH = 2048;
 
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     public MessageService(
             ConversationRepository conversationRepository,
             MessageRepository messageRepository,
             UserRepository userRepository,
-            SimpMessagingTemplate messagingTemplate) {
+            ApplicationEventPublisher eventPublisher) {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
-        this.messagingTemplate = messagingTemplate;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
     public ConversationResponse getOrCreateConversation(Long creatorId, CreateConversationRequest request) {
         User creator = userRepository.findById(creatorId).orElseThrow(() -> new NotFoundException("User not found"));
 
-        List<User> others = request.participantUsernames().stream()
-                .map(username -> userRepository
-                        .findByUsername(username)
-                        .orElseThrow(() -> new NotFoundException("User not found: " + username)))
-                .filter(u -> !u.getId().equals(creatorId))
-                .distinct()
+        List<User> found = userRepository.findAllByUsernameIn(request.participantUsernames());
+        Set<String> foundUsernames = found.stream().map(User::getUsername).collect(Collectors.toSet());
+        List<String> missing = request.participantUsernames().stream()
+                .filter(u -> !foundUsernames.contains(u))
                 .toList();
+        if (!missing.isEmpty()) {
+            throw new NotFoundException("User not found: " + String.join(", ", missing));
+        }
+        List<User> others = found.stream().filter(u -> !u.getId().equals(creatorId)).distinct().toList();
         if (others.isEmpty()) {
             throw new BadRequestException("A conversation needs at least one other participant");
         }
 
         Conversation conversation;
         if (others.size() == 1) {
+            Long otherId = others.get(0).getId();
+            // Serializes concurrent get-or-create calls for this pair so two callers can't both
+            // pass the lookup below before either has committed its INSERT — see the repository
+            // method's Javadoc. Held for the rest of this transaction, released on commit/rollback.
+            conversationRepository.acquireOneToOneConversationLock(Math.min(creatorId, otherId), Math.max(creatorId, otherId));
             conversation = conversationRepository
-                    .findOneToOneConversation(creatorId, others.get(0).getId())
+                    .findOneToOneConversation(creatorId, otherId)
                     .orElseGet(() -> createConversation(creator, others, false));
         } else {
             conversation = createConversation(creator, others, true);
@@ -73,20 +83,30 @@ public class MessageService {
     }
 
     @Transactional(readOnly = true)
-    public List<ConversationResponse> listConversations(Long userId) {
-        return conversationRepository.findByParticipantIdOrderByLastActivity(userId, MAX_CONVERSATIONS).stream()
-                .map(this::toResponse)
-                .toList();
+    public CursorPage<ConversationResponse> listConversations(Long userId, String cursor, int limit) {
+        Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
+        List<Conversation> rows = decoded == null
+                ? conversationRepository.findFirstPageByParticipantId(userId, limit + 1)
+                : conversationRepository.findPageByParticipantIdAfterCursor(
+                        userId, decoded.createdAt(), decoded.id(), limit + 1);
+
+        CursorPage<Conversation> page =
+                CursorPage.of(rows, limit, c -> new Cursor(lastActivity(c), c.getId()).encode());
+        List<ConversationResponse> items = page.items().stream().map(this::toResponse).toList();
+        return new CursorPage<>(items, page.nextCursor(), page.hasMore());
     }
 
     @Transactional
     public MessageResponse sendMessage(Long conversationId, Long senderId, SendMessageRequest request) {
-        if (blank(request.content()) && blank(request.mediaUrl())) {
-            throw new BadRequestException("A message needs content or a mediaUrl");
-        }
+        validate(request);
+        // Checked before loading the conversation so a nonexistent id and a real conversation the
+        // caller isn't part of both resolve to 403 here, matching getHistory below — previously
+        // this method 404'd on a bad id before ever checking membership, letting a caller
+        // distinguish "exists, I'm just not in it" from "doesn't exist" that the sibling GET
+        // endpoint doesn't allow.
+        assertParticipant(conversationId, senderId);
         Conversation conversation =
                 conversationRepository.findById(conversationId).orElseThrow(() -> new NotFoundException("Conversation not found"));
-        assertParticipant(conversationId, senderId);
         User sender = userRepository.findById(senderId).orElseThrow(() -> new NotFoundException("User not found"));
 
         Message message = new Message();
@@ -97,12 +117,15 @@ public class MessageService {
         message.setCreatedAt(Instant.now());
         message = messageRepository.save(message);
 
+        conversation.setLastMessageAt(message.getCreatedAt());
+        conversationRepository.save(conversation);
+
         MessageResponse response = toResponse(message, UserSummary.from(sender));
-        for (User participant : conversation.getParticipants()) {
-            if (!participant.getId().equals(senderId)) {
-                messagingTemplate.convertAndSendToUser(String.valueOf(participant.getId()), "/queue/messages", response);
-            }
-        }
+        // Every participant, including the sender — a STOMP-originated sender otherwise never
+        // learns their own message's server-assigned id/createdAt (the REST path returns it
+        // directly in the response body; STOMP has no equivalent unless it's pushed back here).
+        List<Long> recipientIds = conversation.getParticipants().stream().map(User::getId).toList();
+        eventPublisher.publishEvent(new MessageSentEvent(response, recipientIds));
         return response;
     }
 
@@ -128,6 +151,21 @@ public class MessageService {
         return new CursorPage<>(items, page.nextCursor(), page.hasMore());
     }
 
+    private void validate(SendMessageRequest request) {
+        if (blank(request.content()) && blank(request.mediaUrl())) {
+            throw new BadRequestException("A message needs content or a mediaUrl");
+        }
+        // Enforced here rather than relying solely on SendMessageRequest's @Size, since STOMP's
+        // @Payload isn't bean-validated the way @Valid @RequestBody is on the REST path — this is
+        // the one choke point both transports go through, so it's enforced for both regardless.
+        if (request.content() != null && request.content().length() > MAX_CONTENT_LENGTH) {
+            throw new BadRequestException("content must be at most " + MAX_CONTENT_LENGTH + " characters");
+        }
+        if (request.mediaUrl() != null && request.mediaUrl().length() > MAX_MEDIA_URL_LENGTH) {
+            throw new BadRequestException("mediaUrl must be at most " + MAX_MEDIA_URL_LENGTH + " characters");
+        }
+    }
+
     private Conversation createConversation(User creator, List<User> others, boolean group) {
         Conversation conversation = new Conversation();
         conversation.setGroup(group);
@@ -142,6 +180,10 @@ public class MessageService {
         if (!conversationRepository.existsByIdAndParticipantsId(conversationId, userId)) {
             throw new ForbiddenException("You are not a participant in this conversation");
         }
+    }
+
+    private Instant lastActivity(Conversation conversation) {
+        return conversation.getLastMessageAt() != null ? conversation.getLastMessageAt() : conversation.getCreatedAt();
     }
 
     private ConversationResponse toResponse(Conversation conversation) {

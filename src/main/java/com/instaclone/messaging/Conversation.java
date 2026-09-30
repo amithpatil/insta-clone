@@ -35,6 +35,11 @@ public class Conversation {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    // Null until the first message is sent; updated on every send. Drives listConversations'
+    // ordering and its cursor — see MessageService.sendMessage / ConversationRepository.
+    @Column(name = "last_message_at")
+    private Instant lastMessageAt;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "conversation_participants",

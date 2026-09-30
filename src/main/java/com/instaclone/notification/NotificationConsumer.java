@@ -1,10 +1,6 @@
 package com.instaclone.notification;
 
-import com.instaclone.common.NotFoundException;
-import com.instaclone.user.User;
-import com.instaclone.user.UserRepository;
 import com.instaclone.user.UserSummary;
-import java.time.Instant;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +9,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.stream.StreamListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Picks up NotificationEvent messages off the Redis Stream, creates the durable Notification row,
@@ -25,18 +20,13 @@ public class NotificationConsumer implements StreamListener<String, MapRecord<St
 
     private static final Logger log = LoggerFactory.getLogger(NotificationConsumer.class);
 
-    private final NotificationRepository notificationRepository;
-    private final UserRepository userRepository;
+    private final NotificationWriter notificationWriter;
     private final StringRedisTemplate redisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
 
     public NotificationConsumer(
-            NotificationRepository notificationRepository,
-            UserRepository userRepository,
-            StringRedisTemplate redisTemplate,
-            SimpMessagingTemplate messagingTemplate) {
-        this.notificationRepository = notificationRepository;
-        this.userRepository = userRepository;
+            NotificationWriter notificationWriter, StringRedisTemplate redisTemplate, SimpMessagingTemplate messagingTemplate) {
+        this.notificationWriter = notificationWriter;
         this.redisTemplate = redisTemplate;
         this.messagingTemplate = messagingTemplate;
     }
@@ -45,7 +35,8 @@ public class NotificationConsumer implements StreamListener<String, MapRecord<St
     public void onMessage(MapRecord<String, String, String> message) {
         Map<String, String> body = message.getValue();
         try {
-            Notification notification = createNotification(body);
+            // Delegates to a separate bean so its @Transactional actually applies — see NotificationWriter's Javadoc.
+            Notification notification = notificationWriter.createNotification(body);
             pushLive(notification);
         } catch (Exception e) {
             log.error("Failed to process notification event {}", body, e);
@@ -54,22 +45,6 @@ public class NotificationConsumer implements StreamListener<String, MapRecord<St
                     .opsForStream()
                     .acknowledge(NotificationStreamConfig.STREAM_KEY, NotificationStreamConfig.CONSUMER_GROUP, message.getId());
         }
-    }
-
-    @Transactional
-    Notification createNotification(Map<String, String> body) {
-        User actor = userRepository
-                .findById(Long.valueOf(body.get("actorId")))
-                .orElseThrow(() -> new NotFoundException("User not found"));
-
-        Notification notification = new Notification();
-        notification.setRecipient(userRepository.getReferenceById(Long.valueOf(body.get("recipientId"))));
-        notification.setActor(actor);
-        notification.setType(NotificationType.valueOf(body.get("type")));
-        notification.setTargetType(body.get("targetType"));
-        notification.setTargetId(Long.valueOf(body.get("targetId")));
-        notification.setCreatedAt(Instant.now());
-        return notificationRepository.save(notification);
     }
 
     private void pushLive(Notification notification) {

@@ -4,7 +4,6 @@ import com.instaclone.common.CursorPage;
 import com.instaclone.common.PageParams;
 import com.instaclone.common.SecurityUtils;
 import jakarta.validation.Valid;
-import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -35,8 +34,11 @@ public class ConversationController {
     }
 
     @GetMapping
-    public List<ConversationResponse> listConversations(@AuthenticationPrincipal Jwt jwt) {
-        return messageService.listConversations(SecurityUtils.currentUserId(jwt));
+    public CursorPage<ConversationResponse> listConversations(
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit,
+            @AuthenticationPrincipal Jwt jwt) {
+        return messageService.listConversations(SecurityUtils.currentUserId(jwt), cursor, PageParams.clamp(limit));
     }
 
     @PostMapping("/{id}/messages")
