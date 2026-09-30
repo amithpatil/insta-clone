@@ -1,11 +1,9 @@
 package com.instaclone.media;
 
+import com.instaclone.common.RedisStreamGroupBootstrapper;
 import java.time.Duration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
@@ -27,12 +25,13 @@ public class MediaStreamConfig {
     public static final String CONSUMER_GROUP = "transcode-workers";
     private static final String CONSUMER_NAME = "transcode-worker-1";
 
-    private static final Logger log = LoggerFactory.getLogger(MediaStreamConfig.class);
-
     @Bean(initMethod = "start", destroyMethod = "stop")
     public StreamMessageListenerContainer<String, MapRecord<String, String, String>> mediaStreamContainer(
-            RedisConnectionFactory connectionFactory, StringRedisTemplate redisTemplate, MediaUploadConsumer consumer) {
-        ensureConsumerGroup(redisTemplate);
+            RedisConnectionFactory connectionFactory,
+            StringRedisTemplate redisTemplate,
+            MediaUploadConsumer consumer,
+            RedisStreamGroupBootstrapper bootstrapper) {
+        bootstrapper.ensureConsumerGroup(redisTemplate, STREAM_KEY, CONSUMER_GROUP);
 
         StreamMessageListenerContainerOptions<String, MapRecord<String, String, String>> options =
                 StreamMessageListenerContainerOptions.builder()
@@ -47,19 +46,5 @@ public class MediaStreamConfig {
                 consumer);
 
         return container;
-    }
-
-    // XGROUP CREATE ... MKSTREAM, idempotently — BUSYGROUP just means a previous run already did this.
-    private void ensureConsumerGroup(StringRedisTemplate redisTemplate) {
-        try {
-            redisTemplate.opsForStream().createGroup(STREAM_KEY, ReadOffset.from("0"), CONSUMER_GROUP);
-        } catch (RedisSystemException e) {
-            String message = e.getMostSpecificCause().getMessage();
-            if (message != null && message.contains("BUSYGROUP")) {
-                log.debug("Consumer group '{}' already exists on stream '{}'", CONSUMER_GROUP, STREAM_KEY);
-            } else {
-                throw e;
-            }
-        }
     }
 }

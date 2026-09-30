@@ -38,6 +38,14 @@ app:
     # Host only — StorageService appends the bucket itself so the signed and public URLs can't drift apart.
     public-base-url: http://localhost:8333
     auto-create-bucket: true
+  stories:
+    default-ttl: PT24H
+    max-ttl: PT24H
+  search:
+    endpoint: http://localhost:7700
+    api-key: local-dev-master-key
+    users-index: users
+    posts-index: posts
 
 management:
   endpoints:

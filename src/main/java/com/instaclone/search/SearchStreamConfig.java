@@ -1,4 +1,4 @@
-package com.instaclone.notification;
+package com.instaclone.search;
 
 import com.instaclone.common.RedisStreamGroupBootstrapper;
 import java.time.Duration;
@@ -14,21 +14,23 @@ import org.springframework.data.redis.stream.StreamMessageListenerContainer;
 import org.springframework.data.redis.stream.StreamMessageListenerContainer.StreamMessageListenerContainerOptions;
 
 /**
- * Same shape as com.instaclone.media.MediaStreamConfig — a second Redis Stream/consumer group for
- * a second concern, not a new architecture. Runs in-process, inside the same Spring Boot app.
+ * Third instance of the same Redis Streams shape as com.instaclone.media / com.instaclone.notification
+ * — a stream/consumer-group pair for a third concern. The identical "bootstrap the consumer group"
+ * boilerplate is shared via RedisStreamGroupBootstrapper; the publish/consume logic stays separate
+ * per pipeline, since those genuinely differ (see the class comment on the bootstrapper).
  */
 @Configuration
-public class NotificationStreamConfig {
+public class SearchStreamConfig {
 
-    public static final String STREAM_KEY = "notifications";
-    public static final String CONSUMER_GROUP = "notification-workers";
-    private static final String CONSUMER_NAME = "notification-worker-1";
+    public static final String STREAM_KEY = "search-index";
+    public static final String CONSUMER_GROUP = "search-index-workers";
+    private static final String CONSUMER_NAME = "search-index-worker-1";
 
     @Bean(initMethod = "start", destroyMethod = "stop")
-    public StreamMessageListenerContainer<String, MapRecord<String, String, String>> notificationStreamContainer(
+    public StreamMessageListenerContainer<String, MapRecord<String, String, String>> searchStreamContainer(
             RedisConnectionFactory connectionFactory,
             StringRedisTemplate redisTemplate,
-            NotificationConsumer consumer,
+            SearchIndexConsumer consumer,
             RedisStreamGroupBootstrapper bootstrapper) {
         bootstrapper.ensureConsumerGroup(redisTemplate, STREAM_KEY, CONSUMER_GROUP);
 

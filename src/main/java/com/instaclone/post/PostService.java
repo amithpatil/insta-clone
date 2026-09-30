@@ -5,7 +5,12 @@ import com.instaclone.common.Cursor;
 import com.instaclone.common.CursorPage;
 import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
+import com.instaclone.config.SearchProperties;
 import com.instaclone.config.StorageProperties;
+import com.instaclone.hashtag.Hashtag;
+import com.instaclone.hashtag.HashtagService;
+import com.instaclone.search.SearchDocuments;
+import com.instaclone.search.SearchIndexEvent;
 import com.instaclone.social.comment.CommentRepository;
 import com.instaclone.social.like.LikeRepository;
 import com.instaclone.social.like.LikeableType;
@@ -19,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +38,9 @@ public class PostService {
     private final LikeRepository likeRepository;
     private final ProfileVisibilityService profileVisibilityService;
     private final StorageProperties storageProperties;
+    private final HashtagService hashtagService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final SearchProperties searchProperties;
 
     public PostService(
             PostRepository postRepository,
@@ -40,7 +49,10 @@ public class PostService {
             CommentRepository commentRepository,
             LikeRepository likeRepository,
             ProfileVisibilityService profileVisibilityService,
-            StorageProperties storageProperties) {
+            StorageProperties storageProperties,
+            HashtagService hashtagService,
+            ApplicationEventPublisher eventPublisher,
+            SearchProperties searchProperties) {
         this.postRepository = postRepository;
         this.mediaRepository = mediaRepository;
         this.userRepository = userRepository;
@@ -48,6 +60,9 @@ public class PostService {
         this.likeRepository = likeRepository;
         this.profileVisibilityService = profileVisibilityService;
         this.storageProperties = storageProperties;
+        this.hashtagService = hashtagService;
+        this.eventPublisher = eventPublisher;
+        this.searchProperties = searchProperties;
     }
 
     @Transactional
@@ -66,6 +81,7 @@ public class PostService {
         post.setType(PostType.PHOTO);
         post.setMediaCount(1);
         post.setCreatedAt(Instant.now());
+        hashtagService.parseAndAttach(post, request.caption());
         post = postRepository.save(post);
 
         Media media = new Media();
@@ -76,6 +92,7 @@ public class PostService {
         media.setHeight(request.media().height());
         media.setPosition(0);
         media = mediaRepository.save(media);
+        indexForSearch(post);
 
         return toResponse(post, UserSummary.from(author), List.of(media), false);
     }
@@ -104,6 +121,19 @@ public class PostService {
         }
         likeRepository.deleteByLikeableTypeAndLikeableId(LikeableType.POST, postId);
         postRepository.delete(post);
+        eventPublisher.publishEvent(SearchIndexEvent.delete(searchProperties.postsIndex(), String.valueOf(postId)));
+    }
+
+    /** Public so ReelService (a video-specific Post variant) can reuse the same indexing rule. */
+    public void indexForSearch(Post post) {
+        // Private accounts' posts simply never enter the index — same "public accounts only"
+        // rule as explore/hashtag browsing, applied at index time rather than query time so
+        // private content is never even stored in Meilisearch. If an account later goes public,
+        // its existing posts aren't retroactively indexed — a deliberate scope trim, not a bug.
+        if (!post.getUser().isPrivate()) {
+            eventPublisher.publishEvent(SearchIndexEvent.upsert(
+                    searchProperties.postsIndex(), String.valueOf(post.getId()), SearchDocuments.forPost(post)));
+        }
     }
 
     @Transactional(readOnly = true)
@@ -119,6 +149,16 @@ public class PostService {
                 ? postRepository.findFirstPageByUserId(author.getId(), limit + 1)
                 : postRepository.findPageByUserIdAfterCursor(
                         author.getId(), decoded.createdAt(), decoded.id(), limit + 1);
+
+        return toPage(rows, limit, viewerId);
+    }
+
+    @Transactional(readOnly = true)
+    public CursorPage<PostResponse> getPostsByHashtag(String tag, Long viewerId, String cursor, int limit) {
+        Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
+        List<Post> rows = decoded == null
+                ? postRepository.findFirstPageByHashtag(tag, limit + 1)
+                : postRepository.findPageByHashtagAfterCursor(tag, decoded.createdAt(), decoded.id(), limit + 1);
 
         return toPage(rows, limit, viewerId);
     }
@@ -175,6 +215,7 @@ public class PostService {
                 post.getCommentCount(),
                 likedByViewer,
                 post.getCreatedAt(),
-                media.stream().map(MediaResponse::from).toList());
+                media.stream().map(MediaResponse::from).toList(),
+                post.getHashtags().stream().map(Hashtag::getTag).sorted().toList());
     }
 }

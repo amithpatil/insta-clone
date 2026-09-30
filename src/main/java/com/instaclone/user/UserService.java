@@ -4,12 +4,16 @@ import com.instaclone.common.Cursor;
 import com.instaclone.common.CursorPage;
 import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
+import com.instaclone.config.SearchProperties;
 import com.instaclone.post.PostRepository;
+import com.instaclone.search.SearchDocuments;
+import com.instaclone.search.SearchIndexEvent;
 import com.instaclone.social.follow.FollowRepository;
 import com.instaclone.social.follow.FollowStatus;
 import com.instaclone.social.follow.FollowUserRow;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,16 +24,22 @@ public class UserService {
     private final FollowRepository followRepository;
     private final PostRepository postRepository;
     private final ProfileVisibilityService profileVisibilityService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final SearchProperties searchProperties;
 
     public UserService(
             UserRepository userRepository,
             FollowRepository followRepository,
             PostRepository postRepository,
-            ProfileVisibilityService profileVisibilityService) {
+            ProfileVisibilityService profileVisibilityService,
+            ApplicationEventPublisher eventPublisher,
+            SearchProperties searchProperties) {
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.postRepository = postRepository;
         this.profileVisibilityService = profileVisibilityService;
+        this.eventPublisher = eventPublisher;
+        this.searchProperties = searchProperties;
     }
 
     public User findByUsernameOrThrow(String username) {
@@ -61,6 +71,8 @@ public class UserService {
             user.setPrivate(request.isPrivate());
         }
         user.setUpdatedAt(Instant.now());
+        eventPublisher.publishEvent(SearchIndexEvent.upsert(
+                searchProperties.usersIndex(), String.valueOf(user.getId()), SearchDocuments.forUser(user)));
         return toProfileResponse(user, userId);
     }
 

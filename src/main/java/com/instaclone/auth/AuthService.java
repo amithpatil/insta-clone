@@ -3,9 +3,13 @@ package com.instaclone.auth;
 import com.instaclone.common.ConflictException;
 import com.instaclone.common.UnauthorizedException;
 import com.instaclone.config.JwtProperties;
+import com.instaclone.config.SearchProperties;
+import com.instaclone.search.SearchDocuments;
+import com.instaclone.search.SearchIndexEvent;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
 import java.time.Instant;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -22,18 +26,24 @@ public class AuthService {
     private final JwtEncoder jwtEncoder;
     private final JwtProperties jwtProperties;
     private final RefreshTokenStore refreshTokenStore;
+    private final ApplicationEventPublisher eventPublisher;
+    private final SearchProperties searchProperties;
 
     public AuthService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
             JwtEncoder jwtEncoder,
             JwtProperties jwtProperties,
-            RefreshTokenStore refreshTokenStore) {
+            RefreshTokenStore refreshTokenStore,
+            ApplicationEventPublisher eventPublisher,
+            SearchProperties searchProperties) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtEncoder = jwtEncoder;
         this.jwtProperties = jwtProperties;
         this.refreshTokenStore = refreshTokenStore;
+        this.eventPublisher = eventPublisher;
+        this.searchProperties = searchProperties;
     }
 
     @Transactional
@@ -54,6 +64,8 @@ public class AuthService {
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
         user = userRepository.save(user);
+        eventPublisher.publishEvent(SearchIndexEvent.upsert(
+                searchProperties.usersIndex(), String.valueOf(user.getId()), SearchDocuments.forUser(user)));
 
         return issueTokens(user);
     }

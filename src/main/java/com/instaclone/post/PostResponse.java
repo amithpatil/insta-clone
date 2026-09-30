@@ -15,4 +15,5 @@ public record PostResponse(
         long commentCount,
         boolean likedByViewer,
         Instant createdAt,
-        List<MediaResponse> media) {}
+        List<MediaResponse> media,
+        List<String> hashtags) {}

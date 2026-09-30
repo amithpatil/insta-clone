@@ -35,6 +35,17 @@ services:
     volumes:
       - 'seaweedfs-data:/data'
 
+  meilisearch:
+    image: 'getmeili/meilisearch:v1.54.2'
+    environment:
+      # Fine as a fixed dev-only key — same treatment as SeaweedFS's "any key works locally".
+      - 'MEILI_MASTER_KEY=local-dev-master-key'
+      - 'MEILI_ENV=development'
+    ports:
+      - '7700:7700'
+    volumes:
+      - 'meilisearch-data:/meili_data'
+
   # The app itself, containerized — opt-in via `docker compose --profile full up`. Plain
   # `docker compose up -d` (the everyday dev flow used throughout this project, pairing this file
   # with `./mvnw spring-boot:run` on the host) is completely unaffected: this service is excluded
@@ -55,6 +66,9 @@ services:
         condition: service_healthy
       seaweedfs:
         condition: service_started
+      meilisearch:
+        condition: service_started
 
 volumes:
   seaweedfs-data:
+  meilisearch-data:

@@ -120,4 +120,29 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             @Param("cursorRank") long cursorRank,
             @Param("cursorId") Long cursorId,
             @Param("limit") int limit);
+
+    // Browsing a hashtag is a discovery surface like explore — same rule: public accounts only,
+    // regardless of follow state, not just "posts I'm allowed to see."
+    @Query(
+            value =
+                    "SELECT p.* FROM posts p JOIN post_hashtags ph ON ph.post_id = p.id "
+                            + "JOIN hashtags h ON h.id = ph.hashtag_id JOIN users u ON u.id = p.user_id "
+                            + "WHERE h.tag = :tag AND u.is_private = false AND " + READY_FILTER_P
+                            + " ORDER BY p.created_at DESC, p.id DESC LIMIT :limit",
+            nativeQuery = true)
+    List<Post> findFirstPageByHashtag(@Param("tag") String tag, @Param("limit") int limit);
+
+    @Query(
+            value =
+                    "SELECT p.* FROM posts p JOIN post_hashtags ph ON ph.post_id = p.id "
+                            + "JOIN hashtags h ON h.id = ph.hashtag_id JOIN users u ON u.id = p.user_id "
+                            + "WHERE h.tag = :tag AND u.is_private = false "
+                            + "AND (p.created_at, p.id) < (:cursorCreatedAt, :cursorId) AND " + READY_FILTER_P
+                            + " ORDER BY p.created_at DESC, p.id DESC LIMIT :limit",
+            nativeQuery = true)
+    List<Post> findPageByHashtagAfterCursor(
+            @Param("tag") String tag,
+            @Param("cursorCreatedAt") Instant cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            @Param("limit") int limit);
 }

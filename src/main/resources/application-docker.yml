@@ -26,3 +26,7 @@ app:
     # embedded in presigned upload URLs handed back to external clients (curl, a browser, a phone),
     # which can't resolve the "seaweedfs" compose DNS name.
     endpoint: http://seaweedfs:8333
+  search:
+    # Meilisearch results are consumed entirely server-side (the app calls it, not the client), so
+    # there's no client-reachability concern here the way there is for storage's public-base-url.
+    endpoint: http://meilisearch:7700
