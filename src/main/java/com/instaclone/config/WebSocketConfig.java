@@ -17,14 +17,22 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
+    private final CorsProperties corsProperties;
 
-    public WebSocketConfig(StompAuthChannelInterceptor stompAuthChannelInterceptor) {
+    public WebSocketConfig(StompAuthChannelInterceptor stompAuthChannelInterceptor, CorsProperties corsProperties) {
         this.stompAuthChannelInterceptor = stompAuthChannelInterceptor;
+        this.corsProperties = corsProperties;
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws").withSockJS();
+        // Spring's SockJsService does its own origin allowlisting, entirely separate from Spring
+        // Security's CORS filter (SecurityConfig's CorsConfigurationSource) — without this, every
+        // cross-origin SockJS handshake from the frontend dev server 403s with "Origin header value
+        // ... not allowed", regardless of the CORS config being otherwise correct.
+        registry.addEndpoint("/ws")
+                .setAllowedOrigins(corsProperties.allowedOrigins().toArray(new String[0]))
+                .withSockJS();
     }
 
     @Override

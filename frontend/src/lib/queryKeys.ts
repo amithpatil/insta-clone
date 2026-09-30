@@ -1,0 +1,25 @@
+// Hierarchical key factory so `invalidateQueries({ queryKey: queryKeys.posts() })` cascades to
+// every more-specific key below it (TanStack Query matches by array prefix).
+export const queryKeys = {
+  feed: () => ['feed'] as const,
+  explore: () => ['explore'] as const,
+  reelsFeed: () => ['reelsFeed'] as const,
+  posts: () => ['posts'] as const,
+  post: (id: number) => [...queryKeys.posts(), id] as const,
+  userPosts: (username: string) => [...queryKeys.posts(), 'byUser', username] as const,
+  hashtagPosts: (tag: string) => [...queryKeys.posts(), 'byHashtag', tag] as const,
+  comments: (postId: number) => ['comments', postId] as const,
+  users: () => ['users'] as const,
+  userProfile: (username: string) => [...queryKeys.users(), username] as const,
+  followers: (username: string) => [...queryKeys.users(), username, 'followers'] as const,
+  following: (username: string) => [...queryKeys.users(), username, 'following'] as const,
+  stories: () => ['stories'] as const,
+  storiesFeed: () => [...queryKeys.stories(), 'feed'] as const,
+  userStories: (username: string) => [...queryKeys.stories(), 'byUser', username] as const,
+  notifications: () => ['notifications'] as const,
+  conversations: () => ['conversations'] as const,
+  conversation: (id: number) => [...queryKeys.conversations(), id] as const,
+  messages: (conversationId: number) => [...queryKeys.conversation(conversationId), 'messages'] as const,
+  searchUsers: (q: string) => ['search', 'users', q] as const,
+  searchPosts: (q: string) => ['search', 'posts', q] as const,
+}

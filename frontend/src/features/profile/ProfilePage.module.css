@@ -1,0 +1,58 @@
+.page {
+  max-width: var(--layout-max-width);
+  margin: 0 auto;
+  padding-bottom: var(--space-8);
+}
+
+.tabBar {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-8);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-4);
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-top: 1px solid transparent;
+  margin-top: -1px;
+}
+
+.tabActive {
+  color: var(--color-text-primary);
+  border-top-color: var(--color-text-primary);
+}
+
+.gridWrapper {
+  padding: var(--space-4);
+}
+
+.privateGate {
+  max-width: 400px;
+  margin: var(--space-8) auto;
+  text-align: center;
+  padding: var(--space-6);
+}
+
+.privateGateIcon {
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-4);
+}
+
+.privateGateTitle {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-2);
+}
+
+.privateGateSubtitle {
+  color: var(--color-text-secondary);
+}

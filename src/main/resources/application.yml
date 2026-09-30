@@ -46,6 +46,9 @@ app:
     api-key: local-dev-master-key
     users-index: users
     posts-index: posts
+  cors:
+    allowed-origins:
+      - http://localhost:5173
 
 management:
   endpoints:

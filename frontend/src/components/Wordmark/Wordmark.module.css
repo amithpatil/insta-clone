@@ -1,0 +1,6 @@
+.wordmark {
+  font-family: 'Segoe Script', 'Brush Script MT', cursive;
+  font-size: 28px;
+  color: var(--color-text-primary);
+  line-height: 1;
+}
