@@ -127,6 +127,7 @@ public class AuthService {
         User user = userRepository.findById(userId).orElseThrow(() -> new UnauthorizedException("User no longer exists"));
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         user.setUpdatedAt(Instant.now());
+        refreshTokenStore.revokeAll(userId);
     }
 
     private AuthResult issueTokens(User user) {

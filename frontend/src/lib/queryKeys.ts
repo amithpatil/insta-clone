@@ -13,6 +13,7 @@ export const queryKeys = {
   users: () => ['users'] as const,
   userProfile: (username: string) => [...queryKeys.users(), username] as const,
   suggestions: () => [...queryKeys.users(), 'suggestions'] as const,
+  followRequests: () => [...queryKeys.users(), 'followRequests'] as const,
   insights: () => [...queryKeys.users(), 'me', 'insights'] as const,
   followers: (username: string) => [...queryKeys.users(), username, 'followers'] as const,
   following: (username: string) => [...queryKeys.users(), username, 'following'] as const,

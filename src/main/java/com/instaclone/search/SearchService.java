@@ -1,8 +1,10 @@
 package com.instaclone.search;
 
 import com.instaclone.config.SearchProperties;
+import com.instaclone.social.moderation.ModerationService;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -10,18 +12,28 @@ public class SearchService {
 
     private final MeilisearchClient client;
     private final SearchProperties props;
+    private final ModerationService moderationService;
 
-    public SearchService(MeilisearchClient client, SearchProperties props) {
+    public SearchService(MeilisearchClient client, SearchProperties props, ModerationService moderationService) {
         this.client = client;
         this.props = props;
+        this.moderationService = moderationService;
     }
 
-    public List<UserSearchResult> searchUsers(String query, int limit) {
-        return client.search(props.usersIndex(), query, limit).stream().map(SearchService::toUserResult).toList();
+    public List<UserSearchResult> searchUsers(String query, int limit, Long viewerId) {
+        Set<Long> blockedIds = Set.copyOf(moderationService.getBlockedEitherDirectionIds(viewerId));
+        return client.search(props.usersIndex(), query, limit).stream()
+                .map(SearchService::toUserResult)
+                .filter(result -> !blockedIds.contains(result.id()))
+                .toList();
     }
 
-    public List<PostSearchResult> searchPosts(String query, int limit) {
-        return client.search(props.postsIndex(), query, limit).stream().map(SearchService::toPostResult).toList();
+    public List<PostSearchResult> searchPosts(String query, int limit, Long viewerId) {
+        Set<Long> blockedIds = Set.copyOf(moderationService.getBlockedEitherDirectionIds(viewerId));
+        return client.search(props.postsIndex(), query, limit).stream()
+                .map(SearchService::toPostResult)
+                .filter(result -> !blockedIds.contains(result.authorId()))
+                .toList();
     }
 
     @SuppressWarnings("unchecked")

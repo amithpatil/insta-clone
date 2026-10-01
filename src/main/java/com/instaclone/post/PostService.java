@@ -14,6 +14,7 @@ import com.instaclone.search.SearchIndexEvent;
 import com.instaclone.social.comment.CommentRepository;
 import com.instaclone.social.like.LikeRepository;
 import com.instaclone.social.like.LikeableType;
+import com.instaclone.social.moderation.ModerationService;
 import com.instaclone.social.saved.SavedPostRepository;
 import com.instaclone.user.ProfileVisibilityService;
 import com.instaclone.user.User;
@@ -44,6 +45,7 @@ public class PostService {
     private final HashtagService hashtagService;
     private final ApplicationEventPublisher eventPublisher;
     private final SearchProperties searchProperties;
+    private final ModerationService moderationService;
 
     public PostService(
             PostRepository postRepository,
@@ -56,7 +58,8 @@ public class PostService {
             StorageProperties storageProperties,
             HashtagService hashtagService,
             ApplicationEventPublisher eventPublisher,
-            SearchProperties searchProperties) {
+            SearchProperties searchProperties,
+            ModerationService moderationService) {
         this.postRepository = postRepository;
         this.mediaRepository = mediaRepository;
         this.userRepository = userRepository;
@@ -68,6 +71,7 @@ public class PostService {
         this.hashtagService = hashtagService;
         this.eventPublisher = eventPublisher;
         this.searchProperties = searchProperties;
+        this.moderationService = moderationService;
     }
 
     @Transactional
@@ -75,7 +79,7 @@ public class PostService {
         User author = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
 
         for (CreatePostRequest.MediaItem item : request.media()) {
-            if (!storageProperties.isOwnedUrl(item.url())) {
+            if (!storageProperties.isOwnedUrl(item.url(), userId)) {
                 throw new BadRequestException("Media url must reference an object uploaded via /posts/upload-url");
             }
         }
@@ -126,12 +130,19 @@ public class PostService {
             throw new ForbiddenException("You can only edit your own posts");
         }
 
-        post.setCaption(request.caption());
-        post.setLocation(request.location());
-        if (request.caption() == null || request.caption().isBlank()) {
-            post.getHashtags().clear();
-        } else {
-            hashtagService.parseAndAttach(post, request.caption());
+        // A null field means "not part of this patch" (omitted); an explicit "" clears it. Without
+        // this distinction, a caller that only means to update location would null out the caption
+        // (and wipe its hashtags) by simply not mentioning it.
+        if (request.caption() != null) {
+            post.setCaption(request.caption());
+            if (request.caption().isBlank()) {
+                post.getHashtags().clear();
+            } else {
+                hashtagService.parseAndAttach(post, request.caption());
+            }
+        }
+        if (request.location() != null) {
+            post.setLocation(request.location());
         }
         post = postRepository.save(post);
         indexForSearch(post);
@@ -199,10 +210,15 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public CursorPage<PostResponse> getPostsByHashtag(String tag, Long viewerId, String cursor, int limit) {
+        // A discovery surface like Explore — blocked-either-direction users must be excluded here
+        // too, not just the viewer themselves.
+        List<Long> excludedIds = new ArrayList<>(moderationService.getBlockedEitherDirectionIds(viewerId));
+        excludedIds.add(viewerId);
+
         Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
         List<Post> rows = decoded == null
-                ? postRepository.findFirstPageByHashtag(tag, limit + 1)
-                : postRepository.findPageByHashtagAfterCursor(tag, decoded.createdAt(), decoded.id(), limit + 1);
+                ? postRepository.findFirstPageByHashtag(tag, excludedIds, limit + 1)
+                : postRepository.findPageByHashtagAfterCursor(tag, excludedIds, decoded.createdAt(), decoded.id(), limit + 1);
 
         return toPage(rows, limit, viewerId);
     }

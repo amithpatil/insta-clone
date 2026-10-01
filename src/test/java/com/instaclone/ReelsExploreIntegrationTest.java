@@ -2,7 +2,6 @@ package com.instaclone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.instaclone.config.StorageProperties;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -94,9 +93,6 @@ class ReelsExploreIntegrationTest {
     @Autowired
     private TestRestTemplate rest;
 
-    @Autowired
-    private StorageProperties storageProperties;
-
     @Test
     void reelUploadTranscodesAsynchronouslyAndAppearsInFollowersFeed() throws IOException, InterruptedException {
         String authorToken = register("reel_author", "reel_author@example.com");
@@ -168,9 +164,10 @@ class ReelsExploreIntegrationTest {
 
     private Number createPhotoPost(String token, String caption) {
         // No real bytes needed — PostService.createPost only checks the url prefix, it never
-        // fetches the object (unlike the reel/transcode path above).
-        String fakeUrl = storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/posts/fake/" + caption.hashCode() + ".jpg";
-        Map<String, Object> media = Map.of("url", fakeUrl, "width", 800, "height", 600);
+        // fetches the object (unlike the reel/transcode path above). isOwnedUrl does check the
+        // uploader's own id is embedded in the key though, so this goes through the real
+        // presigned-upload endpoint rather than hand-building a URL.
+        Map<String, Object> media = Map.of("url", uploadUrl(token, "image/jpeg"), "width", 800, "height", 600);
         ResponseEntity<Map> response = rest.exchange(
                 "/posts",
                 HttpMethod.POST,
@@ -178,6 +175,16 @@ class ReelsExploreIntegrationTest {
                 Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         return (Number) response.getBody().get("id");
+    }
+
+    private String uploadUrl(String token, String contentType) {
+        ResponseEntity<Map> response = rest.exchange(
+                "/posts/upload-url",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of("contentType", contentType), bearer(token)),
+                Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return (String) response.getBody().get("publicUrl");
     }
 
     private Map<String, Object> awaitReadyMedia(Number postId, String token) throws InterruptedException {

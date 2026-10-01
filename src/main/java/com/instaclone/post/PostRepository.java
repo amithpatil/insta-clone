@@ -65,19 +65,29 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             @Param("cursorId") Long cursorId,
             @Param("limit") int limit);
 
+    // excludedPostIds (reported posts/authors, see FeedService) is filtered here in the query
+    // itself, not after the fetch, so the limit+1 lookahead CursorPage.of relies on to compute
+    // hasMore stays accurate — filtering after the fetch could shrink a full lookahead window down
+    // to <= limit and make a feed with more pages look like it had reached the end.
     @Query(
-            value = "SELECT * FROM posts WHERE user_id IN (:userIds) AND " + READY_FILTER
+            value = "SELECT * FROM posts WHERE user_id IN (:userIds) AND id NOT IN (:excludedPostIds) AND "
+                    + READY_FILTER
                     + " ORDER BY created_at DESC, id DESC LIMIT :limit",
             nativeQuery = true)
-    List<Post> findFirstPageByUserIds(@Param("userIds") List<Long> userIds, @Param("limit") int limit);
+    List<Post> findFirstPageByUserIds(
+            @Param("userIds") List<Long> userIds,
+            @Param("excludedPostIds") List<Long> excludedPostIds,
+            @Param("limit") int limit);
 
     @Query(
             value =
-                    "SELECT * FROM posts WHERE user_id IN (:userIds) AND (created_at, id) < (:cursorCreatedAt, :cursorId) "
+                    "SELECT * FROM posts WHERE user_id IN (:userIds) AND id NOT IN (:excludedPostIds) "
+                            + "AND (created_at, id) < (:cursorCreatedAt, :cursorId) "
                             + "AND " + READY_FILTER + " ORDER BY created_at DESC, id DESC LIMIT :limit",
             nativeQuery = true)
     List<Post> findPageByUserIdsAfterCursor(
             @Param("userIds") List<Long> userIds,
+            @Param("excludedPostIds") List<Long> excludedPostIds,
             @Param("cursorCreatedAt") Instant cursorCreatedAt,
             @Param("cursorId") Long cursorId,
             @Param("limit") int limit);
@@ -108,49 +118,60 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             value =
                     "SELECT p.* FROM posts p JOIN users u ON u.id = p.user_id "
                             + "WHERE u.is_private = false AND p.user_id NOT IN (:excludedIds) "
+                            + "AND p.id NOT IN (:excludedPostIds) "
                             + "AND p.created_at > :since AND "
                             + READY_FILTER_P
                             + " ORDER BY p.like_count DESC, p.id DESC LIMIT :limit",
             nativeQuery = true)
     List<Post> findExploreFirstPage(
-            @Param("excludedIds") List<Long> excludedIds, @Param("since") Instant since, @Param("limit") int limit);
+            @Param("excludedIds") List<Long> excludedIds,
+            @Param("excludedPostIds") List<Long> excludedPostIds,
+            @Param("since") Instant since,
+            @Param("limit") int limit);
 
     @Query(
             value =
                     "SELECT p.* FROM posts p JOIN users u ON u.id = p.user_id "
                             + "WHERE u.is_private = false AND p.user_id NOT IN (:excludedIds) "
+                            + "AND p.id NOT IN (:excludedPostIds) "
                             + "AND p.created_at > :since AND (p.like_count, p.id) < (:cursorRank, :cursorId) AND "
                             + READY_FILTER_P
                             + " ORDER BY p.like_count DESC, p.id DESC LIMIT :limit",
             nativeQuery = true)
     List<Post> findExploreAfterCursor(
             @Param("excludedIds") List<Long> excludedIds,
+            @Param("excludedPostIds") List<Long> excludedPostIds,
             @Param("since") Instant since,
             @Param("cursorRank") long cursorRank,
             @Param("cursorId") Long cursorId,
             @Param("limit") int limit);
 
     // Browsing a hashtag is a discovery surface like explore — same rule: public accounts only,
-    // regardless of follow state, not just "posts I'm allowed to see."
+    // regardless of follow state, not just "posts I'm allowed to see." excludedIds must always
+    // include the viewer's own id (see PostService) so this NOT IN never receives an empty list,
+    // which native Postgres rejects as invalid syntax.
     @Query(
             value =
                     "SELECT p.* FROM posts p JOIN post_hashtags ph ON ph.post_id = p.id "
                             + "JOIN hashtags h ON h.id = ph.hashtag_id JOIN users u ON u.id = p.user_id "
-                            + "WHERE h.tag = :tag AND u.is_private = false AND " + READY_FILTER_P
+                            + "WHERE h.tag = :tag AND u.is_private = false AND p.user_id NOT IN (:excludedIds) AND "
+                            + READY_FILTER_P
                             + " ORDER BY p.created_at DESC, p.id DESC LIMIT :limit",
             nativeQuery = true)
-    List<Post> findFirstPageByHashtag(@Param("tag") String tag, @Param("limit") int limit);
+    List<Post> findFirstPageByHashtag(
+            @Param("tag") String tag, @Param("excludedIds") List<Long> excludedIds, @Param("limit") int limit);
 
     @Query(
             value =
                     "SELECT p.* FROM posts p JOIN post_hashtags ph ON ph.post_id = p.id "
                             + "JOIN hashtags h ON h.id = ph.hashtag_id JOIN users u ON u.id = p.user_id "
-                            + "WHERE h.tag = :tag AND u.is_private = false "
+                            + "WHERE h.tag = :tag AND u.is_private = false AND p.user_id NOT IN (:excludedIds) "
                             + "AND (p.created_at, p.id) < (:cursorCreatedAt, :cursorId) AND " + READY_FILTER_P
                             + " ORDER BY p.created_at DESC, p.id DESC LIMIT :limit",
             nativeQuery = true)
     List<Post> findPageByHashtagAfterCursor(
             @Param("tag") String tag,
+            @Param("excludedIds") List<Long> excludedIds,
             @Param("cursorCreatedAt") Instant cursorCreatedAt,
             @Param("cursorId") Long cursorId,
             @Param("limit") int limit);

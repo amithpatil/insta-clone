@@ -33,23 +33,32 @@ export function PostOptionsMenu({ post, className, onDeleted }: { post: Post; cl
       queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(post.author.username) })
       onDeleted?.()
     },
+    onError: () => window.alert('Something went wrong deleting this post. Please try again.'),
   })
 
   const blockMutation = useMutation({
     mutationFn: () => usersApi.blockUser(post.author.username),
     onSuccess: () => {
+      // Evicting just this one post isn't enough — the blocked author's other posts may already
+      // be cached in the feed/explore lists, and they should also drop out of Suggested Accounts.
       removePostFromAllCaches(queryClient, post.id)
       queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(post.author.username) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.feed() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.explore() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() })
       onDeleted?.()
     },
+    onError: () => window.alert(`Something went wrong blocking @${post.author.username}. Please try again.`),
   })
 
   const reportMutation = useMutation({
     mutationFn: () => reportsApi.report({ targetType: 'POST', targetId: post.id }),
-    onSuccess: () => {
-      removePostFromAllCaches(queryClient, post.id)
-      setShowReported(true)
-    },
+    // Removing the post from caches happens once the confirmation is dismissed (see the
+    // showReported sheet's onClose below), not here — doing it here would unmount this very
+    // component (and the sheet it's about to show) before the user ever sees it, on any surface
+    // where this post is cached in a list (e.g. the home feed).
+    onSuccess: () => setShowReported(true),
+    onError: () => window.alert('Something went wrong reporting this post. Please try again.'),
   })
 
   return (
@@ -100,7 +109,10 @@ export function PostOptionsMenu({ post, className, onDeleted }: { post: Post; cl
       ) : null}
       {showReported ? (
         <ActionSheet
-          onClose={() => setShowReported(false)}
+          onClose={() => {
+            setShowReported(false)
+            removePostFromAllCaches(queryClient, post.id)
+          }}
           actions={[{ label: "Thanks for reporting this. We won't show it to you again.", onClick: () => {} }]}
         />
       ) : null}

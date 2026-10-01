@@ -2,7 +2,6 @@ package com.instaclone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.instaclone.config.StorageProperties;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
@@ -46,9 +45,6 @@ class MessagingNotificationIntegrationTest {
 
     @Autowired
     private TestRestTemplate rest;
-
-    @Autowired
-    private StorageProperties storageProperties;
 
     @Value("${local.server.port}")
     private int port;
@@ -163,8 +159,7 @@ class MessagingNotificationIntegrationTest {
     }
 
     private Number createPhotoPost(String token, String caption) {
-        String fakeUrl = storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/posts/fake/" + caption.hashCode() + ".jpg";
-        Map<String, Object> media = Map.of("url", fakeUrl, "width", 800, "height", 600);
+        Map<String, Object> media = Map.of("url", uploadUrl(token, "image/jpeg"), "width", 800, "height", 600);
         ResponseEntity<Map> response = rest.exchange(
                 "/posts",
                 HttpMethod.POST,
@@ -172,6 +167,19 @@ class MessagingNotificationIntegrationTest {
                 Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         return (Number) response.getBody().get("id");
+    }
+
+    // isOwnedUrl now checks the uploader's own id is embedded in the object key, not just the
+    // bucket prefix — a hand-built fake URL no longer passes, so this goes through the real
+    // presigned-upload endpoint to get a URL scoped to the given token's user.
+    private String uploadUrl(String token, String contentType) {
+        ResponseEntity<Map> response = rest.exchange(
+                "/posts/upload-url",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of("contentType", contentType), bearer(token)),
+                Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return (String) response.getBody().get("publicUrl");
     }
 
     private String register(String username, String email) {

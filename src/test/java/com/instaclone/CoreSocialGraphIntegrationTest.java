@@ -37,8 +37,7 @@ class CoreSocialGraphIntegrationTest {
         String aliceToken = register("alice", "alice@example.com");
         String bobToken = register("bob", "bob@example.com");
 
-        Map<String, Object> media = Map.of(
-                "url", "http://localhost:8333/instaclone-media/posts/test.jpg", "width", 800, "height", 600);
+        Map<String, Object> media = Map.of("url", uploadUrl(aliceToken, "image/jpeg"), "width", 800, "height", 600);
         Map<String, Object> createPost = Map.of("caption", "hello world", "media", List.of(media));
         ResponseEntity<Map> postResponse =
                 rest.exchange("/posts", HttpMethod.POST, new HttpEntity<>(createPost, bearer(aliceToken)), Map.class);
@@ -76,6 +75,19 @@ class CoreSocialGraphIntegrationTest {
         ResponseEntity<Map> response = rest.postForEntity("/auth/register", body, Map.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         return (String) response.getBody().get("accessToken");
+    }
+
+    // isOwnedUrl checks the uploader's own id is embedded in the object key, not just the bucket
+    // prefix — a hand-built fake URL doesn't pass, so this goes through the real presigned-upload
+    // endpoint to get a URL scoped to the given token's user.
+    private String uploadUrl(String token, String contentType) {
+        ResponseEntity<Map> response = rest.exchange(
+                "/posts/upload-url",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of("contentType", contentType), bearer(token)),
+                Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return (String) response.getBody().get("publicUrl");
     }
 
     private HttpHeaders bearer(String token) {

@@ -125,6 +125,16 @@ public class UserService {
         return toUserSummaryPage(rows, limit);
     }
 
+    /** Incoming pending follow requests on the caller's own (private) account — see
+     * FollowRepository.findPendingFollowRequests. */
+    @Transactional(readOnly = true)
+    public List<UserSummary> getFollowRequests(Long userId, int limit) {
+        return followRepository.findPendingFollowRequests(userId, limit).stream()
+                .map(r -> new UserSummary(
+                        r.getUserId(), r.getUsername(), r.getFullName(), r.getProfilePictureUrl(), r.getIsVerified()))
+                .toList();
+    }
+
     /** "Suggested for you" — public accounts the viewer doesn't already follow (or has a pending
      * request to), isn't blocked with, ranked by follower count. No pagination (a short, static
      * list for a sidebar), unlike every other listing here. */

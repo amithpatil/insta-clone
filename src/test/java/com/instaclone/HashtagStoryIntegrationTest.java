@@ -2,7 +2,6 @@ package com.instaclone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.instaclone.config.StorageProperties;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -30,9 +29,6 @@ class HashtagStoryIntegrationTest {
 
     @Autowired
     private TestRestTemplate rest;
-
-    @Autowired
-    private StorageProperties storageProperties;
 
     @Test
     void hashtagsAreParsedAndBrowsableButRespectPrivacy() {
@@ -67,11 +63,10 @@ class HashtagStoryIntegrationTest {
         String bob = register("story_bob", "story_bob@example.com");
         rest.exchange("/users/story_alice/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(bob)), Map.class);
 
-        String fakeUrl = storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/stories/fake/test.jpg";
         ResponseEntity<Map> createResponse = rest.exchange(
                 "/stories",
                 HttpMethod.POST,
-                new HttpEntity<>(Map.of("mediaUrl", fakeUrl, "expiresInSeconds", 2), bearer(alice)),
+                new HttpEntity<>(Map.of("mediaUrl", uploadUrl(alice, "image/jpeg"), "expiresInSeconds", 2), bearer(alice)),
                 Map.class);
         assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         Number storyId = (Number) createResponse.getBody().get("id");
@@ -98,14 +93,25 @@ class HashtagStoryIntegrationTest {
     }
 
     private ResponseEntity<Map> createPhotoPost(String token, String caption) {
-        String fakeUrl =
-                storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/posts/fake/" + caption.hashCode() + ".jpg";
-        Map<String, Object> media = Map.of("url", fakeUrl, "width", 800, "height", 600);
+        Map<String, Object> media = Map.of("url", uploadUrl(token, "image/jpeg"), "width", 800, "height", 600);
         return rest.exchange(
                 "/posts",
                 HttpMethod.POST,
                 new HttpEntity<>(Map.of("caption", caption, "media", List.of(media)), bearer(token)),
                 Map.class);
+    }
+
+    // isOwnedUrl now checks the uploader's own id is embedded in the object key, not just the
+    // bucket prefix — a hand-built fake URL no longer passes, so this goes through the real
+    // presigned-upload endpoint to get a URL scoped to the given token's user.
+    private String uploadUrl(String token, String contentType) {
+        ResponseEntity<Map> response = rest.exchange(
+                "/posts/upload-url",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of("contentType", contentType), bearer(token)),
+                Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return (String) response.getBody().get("publicUrl");
     }
 
     private String register(String username, String email) {

@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -16,12 +17,15 @@ import org.springframework.stereotype.Component;
  * Refresh tokens are opaque random strings, never JWTs — only their SHA-256 hash is stored, as
  * "refresh:{hash}" -> userId in Redis with a TTL matching the token's lifetime. This gives
  * server-side revocation (delete the key) and expiry (TTL) for free, with nothing sensitive
- * persisted if Redis were ever exposed.
+ * persisted if Redis were ever exposed. A per-user set of outstanding hashes ("refresh:user:{id}")
+ * is kept alongside so every token for a user can be revoked at once (e.g. on password reset),
+ * not just the one token a particular request happens to carry.
  */
 @Component
 public class RefreshTokenStore {
 
     private static final String KEY_PREFIX = "refresh:";
+    private static final String USER_TOKENS_PREFIX = "refresh:user:";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final StringRedisTemplate redisTemplate;
@@ -34,7 +38,11 @@ public class RefreshTokenStore {
 
     public String issue(Long userId) {
         String rawToken = generateToken();
-        redisTemplate.opsForValue().set(KEY_PREFIX + hash(rawToken), String.valueOf(userId), ttl);
+        String hash = hash(rawToken);
+        redisTemplate.opsForValue().set(KEY_PREFIX + hash, String.valueOf(userId), ttl);
+        String userTokensKey = userTokensKey(userId);
+        redisTemplate.opsForSet().add(userTokensKey, hash);
+        redisTemplate.expire(userTokensKey, ttl);
         return rawToken;
     }
 
@@ -48,6 +56,21 @@ public class RefreshTokenStore {
 
     public void revoke(String rawToken) {
         redisTemplate.delete(KEY_PREFIX + hash(rawToken));
+    }
+
+    /** Revokes every outstanding refresh token for a user — used when a password reset means any
+     * session issued before it should stop working, not just the token the current request has. */
+    public void revokeAll(Long userId) {
+        String userTokensKey = userTokensKey(userId);
+        Set<String> hashes = redisTemplate.opsForSet().members(userTokensKey);
+        if (hashes != null && !hashes.isEmpty()) {
+            redisTemplate.delete(hashes.stream().map(h -> KEY_PREFIX + h).toList());
+        }
+        redisTemplate.delete(userTokensKey);
+    }
+
+    private static String userTokensKey(Long userId) {
+        return USER_TOKENS_PREFIX + userId;
     }
 
     public Duration ttl() {

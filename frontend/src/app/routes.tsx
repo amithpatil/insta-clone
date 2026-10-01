@@ -10,6 +10,7 @@ import { HashtagPage } from '@/features/hashtag/HashtagPage'
 import { ConversationThread } from '@/features/messaging/ConversationThread'
 import { DirectInboxPage } from '@/features/messaging/DirectInboxPage'
 import { EditProfilePage } from '@/features/profile/EditProfilePage'
+import { FollowRequestsPage } from '@/features/profile/FollowRequestsPage'
 import { InsightsPage } from '@/features/insights/InsightsPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { PostDetailModal } from '@/features/post-detail/PostDetailModal'
@@ -52,6 +53,7 @@ export const routes: RouteObject[] = [
       { path: 'p/:postId', element: <PostPage /> },
       { path: 'accounts/edit', element: <EditProfilePage /> },
       { path: 'accounts/insights', element: <InsightsPage /> },
+      { path: 'accounts/follow-requests', element: <FollowRequestsPage /> },
       { path: ':username', element: <ProfilePage /> },
       { path: ':username/followers', element: <UserListModal mode="followers" /> },
       { path: ':username/following', element: <UserListModal mode="following" /> },

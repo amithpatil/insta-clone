@@ -33,6 +33,9 @@ export function useFollowMutation(username: string, profile: UserProfile) {
       // Reconcile the optimistic guess with the server's authoritative status (a private account
       // could in theory auto-accept or the reverse — trust the response, not the optimistic value).
       patch(result.status === 'ACCEPTED' ? 'FOLLOWING' : 'REQUESTED', 0)
+      // A newly-followed (or requested) user should drop out of Suggested Accounts elsewhere in
+      // the app, not just update this profile's own cache entry.
+      queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() })
     },
     onError: (_err, _vars, context) => {
       if (context) patch(context.previous, 0)

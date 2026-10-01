@@ -50,7 +50,7 @@ public class StoryService {
     public StoryResponse createStory(Long userId, CreateStoryRequest request) {
         User author = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
 
-        if (!storageProperties.isOwnedUrl(request.mediaUrl())) {
+        if (!storageProperties.isOwnedUrl(request.mediaUrl(), userId)) {
             throw new BadRequestException("Media url must reference an object uploaded via /posts/upload-url");
         }
 

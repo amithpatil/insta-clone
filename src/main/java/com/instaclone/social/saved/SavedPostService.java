@@ -13,6 +13,7 @@ import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
 import java.time.Instant;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,18 +25,21 @@ public class SavedPostService {
     private final UserRepository userRepository;
     private final ProfileVisibilityService profileVisibilityService;
     private final PostService postService;
+    private final SavedPostInserter savedPostInserter;
 
     public SavedPostService(
             SavedPostRepository savedPostRepository,
             PostRepository postRepository,
             UserRepository userRepository,
             ProfileVisibilityService profileVisibilityService,
-            PostService postService) {
+            PostService postService,
+            SavedPostInserter savedPostInserter) {
         this.savedPostRepository = savedPostRepository;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.profileVisibilityService = profileVisibilityService;
         this.postService = postService;
+        this.savedPostInserter = savedPostInserter;
     }
 
     @Transactional
@@ -52,7 +56,14 @@ public class SavedPostService {
         saved.setUser(viewer);
         saved.setPost(post);
         saved.setCreatedAt(Instant.now());
-        savedPostRepository.save(saved);
+        try {
+            savedPostInserter.insert(saved);
+        } catch (DataIntegrityViolationException e) {
+            // Lost a race against a concurrent save of the same post by the same user — the
+            // unique(user_id, post_id) constraint caught it in the inserter's own transaction, so
+            // this call's save already exists; treat it as the idempotent no-op it was meant to be
+            // rather than surfacing a 409.
+        }
     }
 
     @Transactional

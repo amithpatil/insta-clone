@@ -2,7 +2,6 @@ package com.instaclone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.instaclone.config.StorageProperties;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -50,9 +49,6 @@ class SearchIntegrationTest {
 
     @Autowired
     private TestRestTemplate rest;
-
-    @Autowired
-    private StorageProperties storageProperties;
 
     @Test
     void postsAndUsersBecomeSearchableAfterCreation() throws InterruptedException {
@@ -116,14 +112,25 @@ class SearchIntegrationTest {
     }
 
     private ResponseEntity<Map> createPhotoPost(String token, String caption) {
-        String fakeUrl =
-                storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/posts/fake/" + caption.hashCode() + ".jpg";
-        Map<String, Object> media = Map.of("url", fakeUrl, "width", 800, "height", 600);
+        Map<String, Object> media = Map.of("url", uploadUrl(token, "image/jpeg"), "width", 800, "height", 600);
         return rest.exchange(
                 "/posts",
                 HttpMethod.POST,
                 new HttpEntity<>(Map.of("caption", caption, "media", List.of(media)), bearer(token)),
                 Map.class);
+    }
+
+    // isOwnedUrl now checks the uploader's own id is embedded in the object key, not just the
+    // bucket prefix — a hand-built fake URL no longer passes, so this goes through the real
+    // presigned-upload endpoint to get a URL scoped to the given token's user.
+    private String uploadUrl(String token, String contentType) {
+        ResponseEntity<Map> response = rest.exchange(
+                "/posts/upload-url",
+                HttpMethod.POST,
+                new HttpEntity<>(Map.of("contentType", contentType), bearer(token)),
+                Map.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return (String) response.getBody().get("publicUrl");
     }
 
     private String register(String username, String email) {

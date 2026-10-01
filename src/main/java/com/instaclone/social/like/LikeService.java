@@ -6,6 +6,7 @@ import com.instaclone.notification.NotificationEvent;
 import com.instaclone.notification.NotificationType;
 import com.instaclone.post.Post;
 import com.instaclone.post.PostRepository;
+import com.instaclone.social.moderation.ModerationService;
 import com.instaclone.user.ProfileVisibilityService;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
@@ -21,6 +22,7 @@ public class LikeService {
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final ProfileVisibilityService profileVisibilityService;
+    private final ModerationService moderationService;
     private final ApplicationEventPublisher eventPublisher;
 
     public LikeService(
@@ -28,11 +30,13 @@ public class LikeService {
             PostRepository postRepository,
             UserRepository userRepository,
             ProfileVisibilityService profileVisibilityService,
+            ModerationService moderationService,
             ApplicationEventPublisher eventPublisher) {
         this.likeRepository = likeRepository;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.profileVisibilityService = profileVisibilityService;
+        this.moderationService = moderationService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -87,6 +91,12 @@ public class LikeService {
     private void assertVisible(Post post, User viewer) {
         if (!profileVisibilityService.isVisible(post.getUser(), viewer)) {
             throw new ForbiddenException("This account is private");
+        }
+        // isVisible is deliberately directional (lets a blocker still view the blocked account's
+        // profile to reach Unblock) — but liking/commenting is a write, so it must also check the
+        // blocker's own side, which isVisible alone doesn't cover.
+        if (moderationService.isBlockedEitherDirection(viewer.getId(), post.getUser().getId())) {
+            throw new ForbiddenException("You can't interact with this account");
         }
     }
 }

@@ -13,7 +13,9 @@ export function EditCaptionModal({ post, onClose }: { post: Post; onClose: () =>
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
-    mutationFn: () => postsApi.updatePost(post.id, { caption: caption || undefined, location: location || undefined }),
+    // Send the fields as explicit strings (including ""), not `|| undefined` — the backend now
+    // treats an omitted field as "leave unchanged" and only an explicit "" as "clear this field".
+    mutationFn: () => postsApi.updatePost(post.id, { caption, location }),
     onSuccess: (updated) => {
       patchPostInAllCaches(queryClient, post.id, {
         caption: updated.caption,

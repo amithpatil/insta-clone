@@ -36,6 +36,12 @@ public class UserController {
         return userService.getSuggestions(SecurityUtils.currentUserId(jwt), PageParams.clamp(limit));
     }
 
+    @GetMapping("/me/follow-requests")
+    public List<UserSummary> getFollowRequests(
+            @RequestParam(required = false) Integer limit, @AuthenticationPrincipal Jwt jwt) {
+        return userService.getFollowRequests(SecurityUtils.currentUserId(jwt), PageParams.clamp(limit));
+    }
+
     @GetMapping("/{username}")
     public UserProfileResponse getProfile(@PathVariable String username, @AuthenticationPrincipal Jwt jwt) {
         return userService.getProfile(username, SecurityUtils.currentUserId(jwt));

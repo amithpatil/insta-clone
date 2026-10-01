@@ -13,9 +13,7 @@ import com.instaclone.social.moderation.ModerationService;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,25 +53,27 @@ public class FeedService {
             return new CursorPage<>(List.of(), null, false);
         }
 
+        List<Long> excludedPostIds = excludedPostIds(viewerId);
         Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
         List<Post> rows = decoded == null
-                ? postRepository.findFirstPageByUserIds(followedIds, limit + 1)
-                : postRepository.findPageByUserIdsAfterCursor(followedIds, decoded.createdAt(), decoded.id(), limit + 1);
+                ? postRepository.findFirstPageByUserIds(followedIds, excludedPostIds, limit + 1)
+                : postRepository.findPageByUserIdsAfterCursor(
+                        followedIds, excludedPostIds, decoded.createdAt(), decoded.id(), limit + 1);
 
-        return postService.toPage(excludeReported(rows, viewerId), limit, viewerId);
+        return postService.toPage(rows, limit, viewerId);
     }
 
     /** A reported post (see ReportService) is filtered out of the two passive/algorithmic surfaces
      * — direct navigation (profile grid, a shared link) still shows it, since the report is a
-     * "don't surface this to me again" signal, not a ban. Filtered post-fetch rather than in the
-     * native query, matching the row-count approximation CommentService already accepts for
-     * restricted comments — an edge case, not a correctness requirement here. */
-    private List<Post> excludeReported(List<Post> rows, Long viewerId) {
-        Set<Long> reportedPostIds = new HashSet<>(reportRepository.findReportedPostIds(viewerId));
-        if (reportedPostIds.isEmpty()) {
-            return rows;
-        }
-        return rows.stream().filter(p -> !reportedPostIds.contains(p.getId())).toList();
+     * "don't surface this to me again" signal, not a ban. Applied inside the native query itself
+     * (NOT IN), not as a post-fetch filter, so it can't shrink the limit+1 lookahead window and
+     * corrupt CursorPage.of's hasMore detection. */
+    private List<Long> excludedPostIds(Long viewerId) {
+        List<Long> ids = new ArrayList<>();
+        ids.add(-1L); // sentinel: a native "NOT IN ()" with an empty list is invalid SQL
+        ids.addAll(reportRepository.findReportedPostIds(viewerId));
+        ids.addAll(reportRepository.findPostIdsByReportedAuthors(viewerId));
+        return ids;
     }
 
     /**
@@ -87,14 +87,14 @@ public class FeedService {
         List<Long> excludedIds = new ArrayList<>(followRepository.findAcceptedFolloweeIds(viewerId));
         excludedIds.add(viewerId);
         excludedIds.addAll(moderationService.getBlockedEitherDirectionIds(viewerId));
+        List<Long> excludedPostIds = excludedPostIds(viewerId);
         Instant since = Instant.now().minus(EXPLORE_WINDOW_DAYS, ChronoUnit.DAYS);
 
         RankCursor decoded = cursor == null ? null : RankCursor.decode(cursor);
         List<Post> rows = decoded == null
-                ? postRepository.findExploreFirstPage(excludedIds, since, limit + 1)
+                ? postRepository.findExploreFirstPage(excludedIds, excludedPostIds, since, limit + 1)
                 : postRepository.findExploreAfterCursor(
-                        excludedIds, since, decoded.rank(), decoded.id(), limit + 1);
-        rows = excludeReported(rows, viewerId);
+                        excludedIds, excludedPostIds, since, decoded.rank(), decoded.id(), limit + 1);
 
         CursorPage<Post> page =
                 CursorPage.of(rows, limit, p -> new RankCursor(p.getLikeCount(), p.getId()).encode());

@@ -59,6 +59,12 @@ public class CommentService {
         Post post = postRepository.findById(postId).orElseThrow(() -> new NotFoundException("Post not found"));
         User author = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
         assertVisible(post, author);
+        // assertVisible is deliberately directional (lets a blocker still view a blocked account's
+        // posts to reach Unblock) — but commenting is a write, so it must also check the
+        // commenter's own side of the block, which assertVisible alone doesn't cover.
+        if (moderationService.isBlockedEitherDirection(userId, post.getUser().getId())) {
+            throw new ForbiddenException("You can't interact with this account");
+        }
 
         Comment parent = null;
         if (request.parentCommentId() != null) {

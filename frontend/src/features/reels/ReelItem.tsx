@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
 import { CaptionText } from '@/components/CaptionText'
 import { Icon } from '@/components/Icon'
+import { PostOptionsMenu } from '@/components/PostOptionsMenu'
 import type { Post } from '@/lib/api/types'
 import { formatCount } from '@/lib/formatters/relativeTime'
 import { useLikeMutation } from '@/lib/hooks/useLikeMutation'
@@ -91,9 +92,7 @@ export function ReelItem({ post }: { post: Post }) {
           <button type="button" className={styles.actionButton} aria-label="Share">
             <Icon name="share" size={28} />
           </button>
-          <button type="button" className={styles.actionButton} aria-label="More options">
-            <Icon name="options" size={28} />
-          </button>
+          <PostOptionsMenu post={post} className={styles.actionButton} />
         </div>
       </div>
     </div>

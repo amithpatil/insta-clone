@@ -68,7 +68,7 @@ public class ReelService {
         User author = userRepository.findById(userId).orElseThrow(() -> new NotFoundException("User not found"));
 
         String mediaUrl = request.media().url();
-        if (!storageProperties.isOwnedUrl(mediaUrl)) {
+        if (!storageProperties.isOwnedUrl(mediaUrl, userId)) {
             throw new BadRequestException("Media url must reference an object uploaded via /posts/upload-url");
         }
         String prefix = storageProperties.publicBaseUrl() + "/" + storageProperties.bucket() + "/";

@@ -37,6 +37,19 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
             nativeQuery = true)
     List<FollowUserRow> findFirstPageFollowers(@Param("userId") Long userId, @Param("limit") int limit);
 
+    /** Incoming PENDING follow requests on a private account — no cursor pagination, matching the
+     * short-list precedent findSuggestions already set for a similarly small, unbounded-in-practice
+     * list. There was previously no way for an account owner to even see these existed. */
+    @Query(
+            value =
+                    "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "
+                            + "u.full_name AS fullName, u.profile_picture_url AS profilePictureUrl, u.is_verified AS isVerified "
+                            + "FROM follows f JOIN users u ON u.id = f.follower_id "
+                            + "WHERE f.followee_id = :userId AND f.status = 'PENDING' "
+                            + "ORDER BY f.created_at DESC, f.id DESC LIMIT :limit",
+            nativeQuery = true)
+    List<FollowUserRow> findPendingFollowRequests(@Param("userId") Long userId, @Param("limit") int limit);
+
     @Query(
             value =
                     "SELECT f.id AS followId, f.created_at AS followCreatedAt, u.id AS userId, u.username AS username, "

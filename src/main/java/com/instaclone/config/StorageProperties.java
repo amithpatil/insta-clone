@@ -12,8 +12,10 @@ public record StorageProperties(
         String publicBaseUrl,
         boolean autoCreateBucket) {
 
-    /** True when the url points at an object this app itself uploaded, not an arbitrary external URL. */
-    public boolean isOwnedUrl(String url) {
-        return url != null && url.startsWith(publicBaseUrl + "/" + bucket + "/");
+    /** True when the url points at an object this specific user uploaded via /posts/upload-url —
+     * not just any object in the app's bucket, which would let a user reference media another user
+     * uploaded (object keys are "posts/{userId}/..." per StorageService.createUploadUrl). */
+    public boolean isOwnedUrl(String url, Long userId) {
+        return url != null && url.startsWith(publicBaseUrl + "/" + bucket + "/posts/" + userId + "/");
     }
 }

@@ -25,6 +25,10 @@ export function getSuggestions(limit?: number) {
   return apiFetch<UserSummary[]>(`/users/suggestions${buildQuery({ limit })}`)
 }
 
+export function getFollowRequests(limit?: number) {
+  return apiFetch<UserSummary[]>(`/users/me/follow-requests${buildQuery({ limit })}`)
+}
+
 export function getFollowers(username: string, cursor?: string, limit?: number) {
   return apiFetch<CursorPage<UserSummary>>(
     `/users/${encodeURIComponent(username)}/followers${buildQuery({ cursor, limit })}`,

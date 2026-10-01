@@ -20,7 +20,11 @@ export function ProfileOptionsMenu({ profile, className }: { profile: UserProfil
 
   const blockMutation = useMutation({
     mutationFn: () => (profile.viewerHasBlocked ? usersApi.unblockUser(profile.username) : usersApi.blockUser(profile.username)),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate()
+      // A newly-blocked user should drop out of Suggested Accounts elsewhere in the app too.
+      queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() })
+    },
   })
   const restrictMutation = useMutation({
     mutationFn: () =>

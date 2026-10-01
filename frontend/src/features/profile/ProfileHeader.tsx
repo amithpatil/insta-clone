@@ -34,6 +34,11 @@ export function ProfileHeader({ profile }: { profile: UserProfile }) {
                     <Button variant="secondary">Insights</Button>
                   </Link>
                 ) : null}
+                {profile.isPrivate ? (
+                  <Link to="/accounts/follow-requests">
+                    <Button variant="secondary">Follow Requests</Button>
+                  </Link>
+                ) : null}
                 <Link to="/accounts/edit" className={styles.settingsButton} aria-label="Settings">
                   <Icon name="more" />
                 </Link>
