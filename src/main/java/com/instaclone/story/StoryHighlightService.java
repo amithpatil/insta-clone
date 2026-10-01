@@ -3,6 +3,7 @@ package com.instaclone.story;
 import com.instaclone.common.BadRequestException;
 import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
+import com.instaclone.config.StorageProperties;
 import com.instaclone.user.ProfileVisibilityService;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
@@ -19,23 +20,29 @@ public class StoryHighlightService {
     private final StoryRepository storyRepository;
     private final UserRepository userRepository;
     private final ProfileVisibilityService profileVisibilityService;
+    private final StorageProperties storageProperties;
 
     public StoryHighlightService(
             StoryHighlightRepository highlightRepository,
             StoryHighlightItemRepository itemRepository,
             StoryRepository storyRepository,
             UserRepository userRepository,
-            ProfileVisibilityService profileVisibilityService) {
+            ProfileVisibilityService profileVisibilityService,
+            StorageProperties storageProperties) {
         this.highlightRepository = highlightRepository;
         this.itemRepository = itemRepository;
         this.storyRepository = storyRepository;
         this.userRepository = userRepository;
         this.profileVisibilityService = profileVisibilityService;
+        this.storageProperties = storageProperties;
     }
 
     @Transactional
     public StoryHighlightResponse createHighlight(Long userId, CreateHighlightRequest request) {
         User user = userRepository.getReferenceById(userId);
+        if (request.coverUrl() != null && !storageProperties.isOwnedUrl(request.coverUrl(), userId)) {
+            throw new BadRequestException("coverUrl must reference an object uploaded via /posts/upload-url");
+        }
         StoryHighlight highlight = new StoryHighlight();
         highlight.setUser(user);
         highlight.setTitle(request.title());
@@ -47,8 +54,9 @@ public class StoryHighlightService {
 
     @Transactional
     public void addItem(Long userId, Long highlightId, AddHighlightItemRequest request) {
-        StoryHighlight highlight =
-                highlightRepository.findById(highlightId).orElseThrow(() -> new NotFoundException("Highlight not found"));
+        StoryHighlight highlight = highlightRepository
+                .findByIdForUpdate(highlightId)
+                .orElseThrow(() -> new NotFoundException("Highlight not found"));
         if (!highlight.getUser().getId().equals(userId)) {
             throw new ForbiddenException("You can only add to your own highlights");
         }

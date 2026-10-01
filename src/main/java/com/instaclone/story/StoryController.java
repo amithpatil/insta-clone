@@ -50,4 +50,10 @@ public class StoryController {
     public void deleteStory(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
         storyService.deleteStory(id, SecurityUtils.currentUserId(jwt));
     }
+
+    @PostMapping("/stories/{id}/view")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void markViewed(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        storyService.markViewed(id, SecurityUtils.currentUserId(jwt));
+    }
 }

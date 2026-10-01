@@ -38,6 +38,7 @@ export function NewHighlightFlow({
     <ActionSheet
       onClose={onClose}
       actions={stories.map((s) => ({
+        key: s.id,
         label: `Story from ${formatRelativeTime(s.createdAt)}`,
         onClick: () => onStorySelected(s.id),
       }))}

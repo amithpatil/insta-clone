@@ -72,12 +72,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccessToken(null)
         setUser(null)
         setStatus('anonymous')
+        // Several query keys (notifications, conversations, feed, insights, ...) aren't namespaced
+        // by user id — without this, a second account logging in on the same tab could render the
+        // previous user's cached data as fresh until it naturally goes stale.
+        queryClient.clear()
       },
       updateUser(patch) {
         setUser((current) => (current ? { ...current, ...patch } : current))
       },
     }),
-    [status, user],
+    [status, user, queryClient],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

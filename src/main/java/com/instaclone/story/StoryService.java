@@ -14,10 +14,12 @@ import com.instaclone.user.UserRepository;
 import com.instaclone.user.UserSummary;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +32,8 @@ public class StoryService {
     private final ProfileVisibilityService profileVisibilityService;
     private final StorageProperties storageProperties;
     private final StoryProperties storyProperties;
+    private final StoryViewRepository storyViewRepository;
+    private final StoryViewInserter storyViewInserter;
 
     public StoryService(
             StoryRepository storyRepository,
@@ -37,13 +41,17 @@ public class StoryService {
             FollowRepository followRepository,
             ProfileVisibilityService profileVisibilityService,
             StorageProperties storageProperties,
-            StoryProperties storyProperties) {
+            StoryProperties storyProperties,
+            StoryViewRepository storyViewRepository,
+            StoryViewInserter storyViewInserter) {
         this.storyRepository = storyRepository;
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.profileVisibilityService = profileVisibilityService;
         this.storageProperties = storageProperties;
         this.storyProperties = storyProperties;
+        this.storyViewRepository = storyViewRepository;
+        this.storyViewInserter = storyViewInserter;
     }
 
     @Transactional
@@ -69,7 +77,27 @@ public class StoryService {
         story.setExpiresAt(now.plus(ttl));
         story = storyRepository.save(story);
 
-        return toResponse(story, UserSummary.from(author));
+        // The author has trivially "seen" the story they just created.
+        return toResponse(story, UserSummary.from(author), true);
+    }
+
+    @Transactional
+    public void markViewed(Long storyId, Long viewerId) {
+        Story story = storyRepository.findById(storyId).orElseThrow(() -> new NotFoundException("Story not found"));
+        if (storyViewRepository.existsByStoryIdAndViewerId(storyId, viewerId)) {
+            return;
+        }
+        User viewer = userRepository.getReferenceById(viewerId);
+        StoryView view = new StoryView();
+        view.setStory(story);
+        view.setViewer(viewer);
+        view.setCreatedAt(Instant.now());
+        try {
+            storyViewInserter.insert(view);
+        } catch (DataIntegrityViolationException e) {
+            // Lost a race against a concurrent view record of the same story by the same viewer —
+            // treat it as the idempotent no-op it was meant to be rather than surfacing an error.
+        }
     }
 
     @Transactional(readOnly = true)
@@ -81,8 +109,10 @@ public class StoryService {
         }
 
         UserSummary authorSummary = UserSummary.from(author);
-        return storyRepository.findActiveByUserId(author.getId(), Instant.now()).stream()
-                .map(s -> toResponse(s, authorSummary))
+        List<Story> stories = storyRepository.findActiveByUserId(author.getId(), Instant.now());
+        Set<Long> viewedIds = viewedStoryIds(viewerId, stories);
+        return stories.stream()
+                .map(s -> toResponse(s, authorSummary, viewedIds.contains(s.getId())))
                 .toList();
     }
 
@@ -106,9 +136,10 @@ public class StoryService {
         Set<Long> authorIds = page.items().stream().map(s -> s.getUser().getId()).collect(Collectors.toSet());
         Map<Long, UserSummary> authorsById = userRepository.findAllById(authorIds).stream()
                 .collect(Collectors.toMap(User::getId, UserSummary::from));
+        Set<Long> viewedIds = viewedStoryIds(viewerId, page.items());
 
         List<StoryResponse> items = page.items().stream()
-                .map(s -> toResponse(s, authorsById.get(s.getUser().getId())))
+                .map(s -> toResponse(s, authorsById.get(s.getUser().getId()), viewedIds.contains(s.getId())))
                 .toList();
         return new CursorPage<>(items, page.nextCursor(), page.hasMore());
     }
@@ -126,7 +157,16 @@ public class StoryService {
         storyRepository.delete(story);
     }
 
-    private StoryResponse toResponse(Story story, UserSummary author) {
-        return new StoryResponse(story.getId(), author, story.getMediaUrl(), story.getExpiresAt(), story.getCreatedAt());
+    private Set<Long> viewedStoryIds(Long viewerId, List<Story> stories) {
+        if (stories.isEmpty()) {
+            return Set.of();
+        }
+        List<Long> storyIds = stories.stream().map(Story::getId).toList();
+        return new HashSet<>(storyViewRepository.findViewedStoryIds(viewerId, storyIds));
+    }
+
+    private StoryResponse toResponse(Story story, UserSummary author, boolean seenByViewer) {
+        return new StoryResponse(
+                story.getId(), author, story.getMediaUrl(), story.getExpiresAt(), story.getCreatedAt(), seenByViewer);
     }
 }

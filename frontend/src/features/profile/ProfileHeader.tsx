@@ -1,16 +1,27 @@
+import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/Button'
 import { Icon } from '@/components/Icon'
 import { ProfileOptionsMenu } from '@/components/ProfileOptionsMenu'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
+import * as usersApi from '@/lib/api/endpoints/users'
 import type { UserProfile } from '@/lib/api/types'
 import { useFollowMutation } from '@/lib/hooks/useFollowMutation'
+import { queryKeys } from '@/lib/queryKeys'
 import styles from './ProfileHeader.module.css'
 
 export function ProfileHeader({ profile }: { profile: UserProfile }) {
   const location = useLocation()
   const { follow, unfollow } = useFollowMutation(profile.username, profile)
+  const isSelfPrivate = profile.viewerRelationship === 'SELF' && profile.isPrivate
+  // Shares queryKeys.followRequests() with FollowRequestsPage, so accepting/declining a request
+  // there keeps this count in sync without a separate invalidation.
+  const { data: followRequests } = useQuery({
+    queryKey: queryKeys.followRequests(),
+    queryFn: () => usersApi.getFollowRequests(),
+    enabled: isSelfPrivate,
+  })
 
   return (
     <header className={styles.header}>
@@ -36,7 +47,9 @@ export function ProfileHeader({ profile }: { profile: UserProfile }) {
                 ) : null}
                 {profile.isPrivate ? (
                   <Link to="/accounts/follow-requests">
-                    <Button variant="secondary">Follow Requests</Button>
+                    <Button variant="secondary">
+                      Follow Requests{followRequests && followRequests.length > 0 ? ` (${followRequests.length})` : ''}
+                    </Button>
                   </Link>
                 ) : null}
                 <Link to="/accounts/edit" className={styles.settingsButton} aria-label="Settings">

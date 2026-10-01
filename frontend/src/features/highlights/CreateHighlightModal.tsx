@@ -17,7 +17,13 @@ export function CreateHighlightModal({ storyId, onClose }: { storyId: number; on
   const mutation = useMutation({
     mutationFn: async () => {
       const highlight = await highlightsApi.createHighlight({ title: title.trim() })
-      await highlightsApi.addHighlightItem(highlight.id, storyId)
+      try {
+        await highlightsApi.addHighlightItem(highlight.id, storyId)
+      } catch (err) {
+        // Don't leave a permanent, empty, cover-less highlight behind if the first item fails to add.
+        await highlightsApi.deleteHighlight(highlight.id).catch(() => {})
+        throw err
+      }
       return highlight
     },
     onSuccess: () => {

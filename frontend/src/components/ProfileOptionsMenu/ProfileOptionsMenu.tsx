@@ -22,8 +22,14 @@ export function ProfileOptionsMenu({ profile, className }: { profile: UserProfil
     mutationFn: () => (profile.viewerHasBlocked ? usersApi.unblockUser(profile.username) : usersApi.blockUser(profile.username)),
     onSuccess: () => {
       invalidate()
-      // A newly-blocked user should drop out of Suggested Accounts elsewhere in the app too.
+      // Already-cached posts from this user can be sitting in the feed/explore lists too, not
+      // just this profile — mirrors PostOptionsMenu's block handler so blocking has the same
+      // effect regardless of which "..." menu it's triggered from.
+      queryClient.invalidateQueries({ queryKey: queryKeys.feed() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.explore() })
       queryClient.invalidateQueries({ queryKey: queryKeys.suggestions() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.storiesFeed() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.userStories(profile.username) })
     },
   })
   const restrictMutation = useMutation({

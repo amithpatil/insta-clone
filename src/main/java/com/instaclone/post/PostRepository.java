@@ -9,8 +9,6 @@ import org.springframework.data.repository.query.Param;
 
 public interface PostRepository extends JpaRepository<Post, Long> {
 
-    long countByUserId(Long userId);
-
     @Query("select p.id from Post p where p.user.id = :userId")
     List<Long> findIdsByUserId(@Param("userId") Long userId);
 
@@ -48,6 +46,11 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     String READY_FILTER = "(type != 'REEL' OR EXISTS (SELECT 1 FROM media m WHERE m.post_id = posts.id AND m.status = 'READY'))";
     String READY_FILTER_P = "(p.type != 'REEL' OR EXISTS (SELECT 1 FROM media m WHERE m.post_id = p.id AND m.status = 'READY'))";
 
+    // Must respect READY_FILTER like every grid/feed query — otherwise a still-transcoding or
+    // failed reel inflates the publicly-shown post count without ever rendering a tile anywhere.
+    @Query(value = "SELECT COUNT(*) FROM posts WHERE user_id = :userId AND " + READY_FILTER, nativeQuery = true)
+    long countByUserId(@Param("userId") Long userId);
+
     @Query(
             value = "SELECT * FROM posts WHERE user_id = :userId AND " + READY_FILTER
                     + " ORDER BY created_at DESC, id DESC LIMIT :limit",
@@ -60,6 +63,25 @@ public interface PostRepository extends JpaRepository<Post, Long> {
                             + "AND " + READY_FILTER + " ORDER BY created_at DESC, id DESC LIMIT :limit",
             nativeQuery = true)
     List<Post> findPageByUserIdAfterCursor(
+            @Param("userId") Long userId,
+            @Param("cursorCreatedAt") Instant cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            @Param("limit") int limit);
+
+    // No READY_FILTER — used only for a user viewing their OWN profile grid, where a still-
+    // transcoding or failed reel should still show up (so it's at least discoverable/deletable)
+    // instead of being invisible even to its own uploader.
+    @Query(
+            value = "SELECT * FROM posts WHERE user_id = :userId ORDER BY created_at DESC, id DESC LIMIT :limit",
+            nativeQuery = true)
+    List<Post> findFirstPageByUserIdIncludingPending(@Param("userId") Long userId, @Param("limit") int limit);
+
+    @Query(
+            value =
+                    "SELECT * FROM posts WHERE user_id = :userId AND (created_at, id) < (:cursorCreatedAt, :cursorId) "
+                            + "ORDER BY created_at DESC, id DESC LIMIT :limit",
+            nativeQuery = true)
+    List<Post> findPageByUserIdAfterCursorIncludingPending(
             @Param("userId") Long userId,
             @Param("cursorCreatedAt") Instant cursorCreatedAt,
             @Param("cursorId") Long cursorId,

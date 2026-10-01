@@ -114,6 +114,7 @@ export interface Story {
   mediaUrl: string
   expiresAt: string
   createdAt: string
+  seenByViewer: boolean
 }
 
 export interface Insights {
@@ -141,7 +142,7 @@ export interface StoryHighlightDetail extends StoryHighlight {
   items: StoryHighlightItem[]
 }
 
-export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW'
+export type NotificationType = 'LIKE' | 'COMMENT' | 'FOLLOW' | 'FOLLOW_REQUEST' | 'FOLLOW_REQUEST_ACCEPTED'
 
 export interface Notification {
   id: number

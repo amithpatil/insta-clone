@@ -37,6 +37,11 @@
   position: relative;
 }
 
+.sentinel {
+  flex-shrink: 0;
+  width: 1px;
+}
+
 .addBadge {
   position: absolute;
   bottom: 0;

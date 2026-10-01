@@ -1,6 +1,8 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Avatar } from '@/components/Avatar'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
+import { useAuth } from '@/contexts/useAuth'
 import * as commentsApi from '@/lib/api/endpoints/comments'
 import type { Comment } from '@/lib/api/types'
 import { formatRelativeTime } from '@/lib/formatters/relativeTime'
@@ -14,7 +16,15 @@ export interface ReplyTarget {
   username: string
 }
 
-export function CommentList({ postId, onReply }: { postId: number; onReply: (target: ReplyTarget) => void }) {
+export function CommentList({
+  postId,
+  onReply,
+  onCommentDeleted,
+}: {
+  postId: number
+  onReply: (target: ReplyTarget) => void
+  onCommentDeleted?: (removedCount: number) => void
+}) {
   const { items, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } = useCursorInfiniteQuery(
     queryKeys.comments(postId),
     (cursor) => commentsApi.getComments(postId, cursor),
@@ -48,7 +58,14 @@ export function CommentList({ postId, onReply }: { postId: number; onReply: (tar
   return (
     <div className={styles.list}>
       {topLevel.map((comment) => (
-        <CommentRow key={comment.id} comment={comment} onReply={onReply} replies={repliesByParent.get(comment.id)} />
+        <CommentRow
+          key={comment.id}
+          postId={postId}
+          comment={comment}
+          onReply={onReply}
+          onCommentDeleted={onCommentDeleted}
+          replies={repliesByParent.get(comment.id)}
+        />
       ))}
       <div ref={sentinelRef} className={styles.sentinel} />
     </div>
@@ -56,16 +73,31 @@ export function CommentList({ postId, onReply }: { postId: number; onReply: (tar
 }
 
 function CommentRow({
+  postId,
   comment,
   replies,
   onReply,
+  onCommentDeleted,
   isReply = false,
 }: {
+  postId: number
   comment: Comment
   replies?: Comment[]
   onReply: (target: ReplyTarget) => void
+  onCommentDeleted?: (removedCount: number) => void
   isReply?: boolean
 }) {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const deleteMutation = useMutation({
+    mutationFn: () => commentsApi.deleteComment(comment.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.comments(postId) })
+      onCommentDeleted?.(1 + (replies?.length ?? 0))
+    },
+    onError: () => window.alert('Something went wrong deleting this comment. Please try again.'),
+  })
+
   return (
     <div className={isReply ? styles.replyRow : styles.row}>
       <Link to={`/${comment.author.username}`}>
@@ -93,11 +125,28 @@ function CommentRow({
           >
             Reply
           </button>
+          {user?.username === comment.author.username ? (
+            <button
+              type="button"
+              className={styles.replyButton}
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+            >
+              Delete
+            </button>
+          ) : null}
         </div>
         {replies && replies.length > 0 ? (
           <div className={styles.replies}>
             {replies.map((reply) => (
-              <CommentRow key={reply.id} comment={reply} onReply={onReply} isReply />
+              <CommentRow
+                key={reply.id}
+                postId={postId}
+                comment={reply}
+                onReply={onReply}
+                onCommentDeleted={onCommentDeleted}
+                isReply
+              />
             ))}
           </div>
         ) : null}

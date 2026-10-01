@@ -36,4 +36,10 @@ public class FollowController {
     public FollowStatusResponse acceptFollowRequest(@PathVariable String username, @AuthenticationPrincipal Jwt jwt) {
         return followService.acceptFollowRequest(SecurityUtils.currentUserId(jwt), username);
     }
+
+    @DeleteMapping("/reject")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void rejectFollowRequest(@PathVariable String username, @AuthenticationPrincipal Jwt jwt) {
+        followService.rejectFollowRequest(SecurityUtils.currentUserId(jwt), username);
+    }
 }

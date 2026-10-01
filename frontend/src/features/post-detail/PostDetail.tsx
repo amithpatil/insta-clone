@@ -18,7 +18,7 @@ import styles from './PostDetail.module.css'
 
 export function PostDetail({ postId }: { postId: number }) {
   const navigate = useNavigate()
-  const { data: post, isLoading } = useQuery({
+  const { data: post, isLoading, isError } = useQuery({
     queryKey: queryKeys.post(postId),
     queryFn: () => postsApi.getPost(postId),
   })
@@ -38,6 +38,14 @@ export function PostDetail({ postId }: { postId: number }) {
       setReplyingTo(null)
     },
   })
+
+  if (isError) {
+    return (
+      <div className={styles.layout}>
+        <p className={styles.notFound}>This post isn't available anymore.</p>
+      </div>
+    )
+  }
 
   if (isLoading || !post) {
     return <div className={styles.layout} />
@@ -78,7 +86,13 @@ export function PostDetail({ postId }: { postId: number }) {
           </div>
         ) : null}
 
-        <CommentList postId={postId} onReply={setReplyingTo} />
+        <CommentList
+          postId={postId}
+          onReply={setReplyingTo}
+          onCommentDeleted={(removedCount) =>
+            patchPostInAllCaches(queryClient, postId, { commentCount: Math.max(post.commentCount - removedCount, 0) })
+          }
+        />
 
         <div className={styles.footer}>
           <div className={styles.actions}>

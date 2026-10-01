@@ -8,6 +8,7 @@ import com.instaclone.post.Post;
 import com.instaclone.post.PostRepository;
 import com.instaclone.post.PostResponse;
 import com.instaclone.post.PostService;
+import com.instaclone.social.moderation.ModerationService;
 import com.instaclone.user.ProfileVisibilityService;
 import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
@@ -24,6 +25,7 @@ public class SavedPostService {
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final ProfileVisibilityService profileVisibilityService;
+    private final ModerationService moderationService;
     private final PostService postService;
     private final SavedPostInserter savedPostInserter;
 
@@ -32,12 +34,14 @@ public class SavedPostService {
             PostRepository postRepository,
             UserRepository userRepository,
             ProfileVisibilityService profileVisibilityService,
+            ModerationService moderationService,
             PostService postService,
             SavedPostInserter savedPostInserter) {
         this.savedPostRepository = savedPostRepository;
         this.postRepository = postRepository;
         this.userRepository = userRepository;
         this.profileVisibilityService = profileVisibilityService;
+        this.moderationService = moderationService;
         this.postService = postService;
         this.savedPostInserter = savedPostInserter;
     }
@@ -48,6 +52,12 @@ public class SavedPostService {
         User viewer = userRepository.getReferenceById(userId);
         if (!profileVisibilityService.isVisible(post.getUser(), viewer)) {
             throw new ForbiddenException("This account is private");
+        }
+        // isVisible is deliberately directional (lets a blocker still view a blocked account's
+        // posts) — but saving is a write, so it must also check the saver's own side of the block,
+        // matching the same guard LikeService/CommentService/FollowService enforce on their writes.
+        if (moderationService.isBlockedEitherDirection(userId, post.getUser().getId())) {
+            throw new ForbiddenException("You can't interact with this account");
         }
         if (savedPostRepository.existsByUserIdAndPostId(userId, postId)) {
             return;

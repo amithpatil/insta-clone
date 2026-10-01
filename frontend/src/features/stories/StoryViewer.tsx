@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Avatar } from '@/components/Avatar'
 import { Icon } from '@/components/Icon'
 import { useAuth } from '@/contexts/useAuth'
@@ -28,12 +28,36 @@ export function StoryViewer({ groups, initialGroupIndex, onClose }: StoryViewerP
   const group = groups[groupIndex]
   const story = group?.stories[storyIndex]
 
+  // groupIndex/storyIndex are plain local state, not reconciled against `groups` when it
+  // refetches in the background (e.g. the stories feed going stale while this stays open) — if
+  // they ever point past the live data, close instead of leaving a dead, un-closeable black
+  // overlay on screen.
+  useEffect(() => {
+    if (!group || !story) {
+      onClose()
+    }
+  }, [group, story, onClose])
+
+  const { mutate: markViewed } = useMutation({
+    mutationFn: (id: number) => storiesApi.markStoryViewed(id),
+  })
+  const storyId = story?.id
+  const storyAlreadySeen = story?.seenByViewer ?? true
+
+  useEffect(() => {
+    if (storyId !== undefined && !storyAlreadySeen) {
+      markViewed(storyId)
+    }
+  }, [storyId, storyAlreadySeen, markViewed])
+
   const deleteMutation = useMutation({
     mutationFn: (id: number) => storiesApi.deleteStory(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.storiesFeed() })
       if (user) queryClient.invalidateQueries({ queryKey: queryKeys.userStories(user.username) })
-      onClose()
+      // Advance to whatever's next (another story in this group, the next group, or close if
+      // nothing remains) instead of unconditionally closing and losing the viewer's place.
+      goToNextStory()
     },
   })
 
@@ -53,8 +77,8 @@ export function StoryViewer({ groups, initialGroupIndex, onClose }: StoryViewerP
     if (storyIndex > 0) {
       setStoryIndex(storyIndex - 1)
     } else if (groupIndex > 0) {
+      setStoryIndex(groups[groupIndex - 1].stories.length - 1)
       setGroupIndex(groupIndex - 1)
-      setStoryIndex(0)
     }
   }
 

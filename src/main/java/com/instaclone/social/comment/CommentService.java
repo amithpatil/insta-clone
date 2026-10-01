@@ -89,9 +89,18 @@ public class CommentService {
 
         postRepository.incrementCommentCount(postId);
 
-        Long recipientId = post.getUser().getId();
-        if (!recipientId.equals(userId)) {
-            eventPublisher.publishEvent(new NotificationEvent(recipientId, userId, NotificationType.COMMENT, "POST", postId));
+        Long postOwnerId = post.getUser().getId();
+        if (!postOwnerId.equals(userId)) {
+            eventPublisher.publishEvent(new NotificationEvent(postOwnerId, userId, NotificationType.COMMENT, "POST", postId));
+        }
+        // A reply should also notify the comment it's replying to, not just the post owner — the
+        // two can easily be different people, and the reply is directed at the parent's author.
+        if (parent != null) {
+            Long parentAuthorId = parent.getUser().getId();
+            if (!parentAuthorId.equals(userId) && !parentAuthorId.equals(postOwnerId)) {
+                eventPublisher.publishEvent(
+                        new NotificationEvent(parentAuthorId, userId, NotificationType.COMMENT, "POST", postId));
+            }
         }
 
         return toResponse(comment, UserSummary.from(author));

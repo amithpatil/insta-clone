@@ -29,6 +29,9 @@ export function AddToHighlightSheet({
     onSuccess: (_result, highlightId) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.highlightDetail(highlightId) })
     },
+    // ActionSheet closes this sheet as soon as an action is tapped, before this request even
+    // settles — without this, a failure would be completely invisible to the user.
+    onError: () => window.alert('Something went wrong adding this story to the highlight. Please try again.'),
   })
 
   return (

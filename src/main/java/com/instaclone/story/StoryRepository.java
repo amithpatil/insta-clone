@@ -11,8 +11,11 @@ public interface StoryRepository extends JpaRepository<Story, Long> {
 
     // A single author's tray — naturally bounded (stories auto-expire within a day), so unlike
     // the accumulate-forever lists elsewhere in this codebase, a plain unpaginated list is fine.
+    // Ascending (oldest first), not the DESC "latest first" convention used for paginated lists
+    // elsewhere — a story tray is watched in the order it was posted, like a narrative, not
+    // browsed newest-first like a feed.
     @Query(
-            value = "SELECT * FROM stories WHERE user_id = :userId AND expires_at > :now ORDER BY created_at DESC",
+            value = "SELECT * FROM stories WHERE user_id = :userId AND expires_at > :now ORDER BY created_at ASC",
             nativeQuery = true)
     List<Story> findActiveByUserId(@Param("userId") Long userId, @Param("now") Instant now);
 

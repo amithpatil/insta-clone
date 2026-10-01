@@ -138,7 +138,7 @@ export function ProfilePage() {
         </div>
       )}
       {viewingHighlightId != null ? (
-        <HighlightViewer highlightId={viewingHighlightId} onClose={() => setViewingHighlightId(null)} />
+        <HighlightViewer highlightId={viewingHighlightId} isOwn={isSelf} onClose={() => setViewingHighlightId(null)} />
       ) : null}
       {showNewHighlight && username ? (
         <NewHighlightFlow

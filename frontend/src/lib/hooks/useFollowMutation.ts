@@ -45,11 +45,15 @@ export function useFollowMutation(username: string, profile: UserProfile) {
   const unfollow = useMutation({
     mutationFn: () => followApi.unfollow(username),
     onMutate: () => {
-      patch('NOT_FOLLOWING', -1)
-      return { previous: profile.viewerRelationship }
+      // A PENDING ("Requested") follow was never counted in followerCount in the first place
+      // (see the follow mutation above) — only cancelling an actual FOLLOWING relationship
+      // should decrement it.
+      const wasFollowing = profile.viewerRelationship === 'FOLLOWING'
+      patch('NOT_FOLLOWING', wasFollowing ? -1 : 0)
+      return { previous: profile.viewerRelationship, delta: wasFollowing ? 1 : 0 }
     },
     onError: (_err, _vars, context) => {
-      if (context) patch(context.previous, 1)
+      if (context) patch(context.previous, context.delta)
     },
   })
 

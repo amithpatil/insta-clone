@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,6 +17,14 @@ public interface FollowRepository extends JpaRepository<Follow, Long> {
     long countByFolloweeIdAndStatus(Long followeeId, FollowStatus status);
 
     long countByFollowerIdAndStatus(Long followerId, FollowStatus status);
+
+    /** Auto-approves every outstanding request when an account switches from private to public —
+     * its content is now visible to everyone anyway, so a still-PENDING row would otherwise strand
+     * the requester on "Requested" even though nothing is actually gating them anymore. */
+    @Modifying
+    @Query("update Follow f set f.status = com.instaclone.social.follow.FollowStatus.ACCEPTED "
+            + "where f.followee.id = :userId and f.status = com.instaclone.social.follow.FollowStatus.PENDING")
+    void acceptAllPendingForFollowee(@Param("userId") Long userId);
 
     @Query(
             value = "SELECT followee_id FROM follows WHERE follower_id = :followerId AND status = 'ACCEPTED'",

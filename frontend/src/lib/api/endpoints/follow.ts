@@ -12,3 +12,7 @@ export function unfollow(username: string) {
 export function acceptFollowRequest(username: string) {
   return apiFetch<FollowStatusResponse>(`/users/${encodeURIComponent(username)}/follow/accept`, { method: 'POST' })
 }
+
+export function rejectFollowRequest(username: string) {
+  return apiFetch<void>(`/users/${encodeURIComponent(username)}/follow/reject`, { method: 'DELETE' })
+}

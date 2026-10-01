@@ -21,3 +21,7 @@ export function getStoriesFeed(cursor?: string, limit?: number) {
 export function deleteStory(id: number) {
   return apiFetch<void>(`/stories/${id}`, { method: 'DELETE' })
 }
+
+export function markStoryViewed(id: number) {
+  return apiFetch<void>(`/stories/${id}/view`, { method: 'POST' })
+}

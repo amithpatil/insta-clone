@@ -55,12 +55,13 @@ public class FollowService {
         follow.setCreatedAt(Instant.now());
         followRepository.save(follow);
 
-        // Only when the follow actually took effect — a private account's PENDING request isn't
-        // "followed you" yet; that notification fires from acceptFollowRequest instead.
-        if (follow.getStatus() == FollowStatus.ACCEPTED) {
-            eventPublisher.publishEvent(
-                    new NotificationEvent(followee.getId(), followerId, NotificationType.FOLLOW, "USER", followerId));
-        }
+        // A public account's follow takes effect immediately ("followed you"); a private account's
+        // request is merely PENDING until approved ("requested to follow you") — the two need
+        // distinct notification types so the recipient (and the frontend copy) can tell them apart.
+        NotificationType notificationType =
+                follow.getStatus() == FollowStatus.ACCEPTED ? NotificationType.FOLLOW : NotificationType.FOLLOW_REQUEST;
+        eventPublisher.publishEvent(
+                new NotificationEvent(followee.getId(), followerId, notificationType, "USER", followerId));
 
         return new FollowStatusResponse(follow.getStatus());
     }
@@ -82,9 +83,21 @@ public class FollowService {
                 .orElseThrow(() -> new NotFoundException("No pending follow request from this user"));
         follow.accept();
 
-        eventPublisher.publishEvent(
-                new NotificationEvent(follower.getId(), approverId, NotificationType.FOLLOW, "USER", approverId));
+        // Distinct from NotificationType.FOLLOW: the approver didn't follow the requester back
+        // (no reciprocal Follow row is created here), they just approved an existing request.
+        eventPublisher.publishEvent(new NotificationEvent(
+                follower.getId(), approverId, NotificationType.FOLLOW_REQUEST_ACCEPTED, "USER", approverId));
 
         return new FollowStatusResponse(follow.getStatus());
+    }
+
+    @Transactional
+    public void rejectFollowRequest(Long approverId, String followerUsername) {
+        User follower = userRepository.findByUsername(followerUsername).orElseThrow(() -> new NotFoundException("User not found"));
+        Follow follow = followRepository
+                .findByFollowerIdAndFolloweeId(follower.getId(), approverId)
+                .filter(f -> f.getStatus() == FollowStatus.PENDING)
+                .orElseThrow(() -> new NotFoundException("No pending follow request from this user"));
+        followRepository.delete(follow);
     }
 }

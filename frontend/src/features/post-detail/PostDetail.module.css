@@ -4,6 +4,12 @@
   max-height: 800px;
 }
 
+.notFound {
+  margin: auto;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
 .media {
   position: relative;
   flex: 1.3;

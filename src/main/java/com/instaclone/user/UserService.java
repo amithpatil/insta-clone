@@ -97,6 +97,12 @@ public class UserService {
                     .forEach(postId -> eventPublisher.publishEvent(
                             SearchIndexEvent.delete(searchProperties.postsIndex(), String.valueOf(postId))));
         }
+        // Account just went public: any still-PENDING follow requests are no longer gating
+        // anything (the content is visible to everyone now), so auto-approve them rather than
+        // stranding the requesters on "Requested" forever.
+        if (wasPrivate && !user.isPrivate()) {
+            followRepository.acceptAllPendingForFollowee(user.getId());
+        }
         return toProfileResponse(user, userId);
     }
 

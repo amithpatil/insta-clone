@@ -17,11 +17,18 @@ function describe(notification: Notification): string {
       return 'commented on your photo.'
     case 'FOLLOW':
       return 'started following you.'
+    case 'FOLLOW_REQUEST':
+      return 'requested to follow you.'
+    case 'FOLLOW_REQUEST_ACCEPTED':
+      return 'accepted your follow request.'
   }
 }
 
 function targetHref(notification: Notification): string {
-  if (notification.type === 'FOLLOW') return `/${notification.actor.username}`
+  if (notification.type === 'FOLLOW_REQUEST') return '/accounts/follow-requests'
+  if (notification.type === 'FOLLOW' || notification.type === 'FOLLOW_REQUEST_ACCEPTED') {
+    return `/${notification.actor.username}`
+  }
   return `/p/${notification.targetId}`
 }
 

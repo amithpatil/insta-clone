@@ -28,6 +28,15 @@ export function FollowRequestsPage() {
     },
   })
 
+  const rejectMutation = useMutation({
+    mutationFn: (username: string) => followApi.rejectFollowRequest(username),
+    onSuccess: (_result, username) => {
+      queryClient.setQueryData<UserSummary[]>(queryKeys.followRequests(), (current) =>
+        current?.filter((u) => u.username !== username),
+      )
+    },
+  })
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -54,9 +63,17 @@ export function FollowRequestsPage() {
               </div>
               <button
                 type="button"
+                className={styles.declineButton}
+                onClick={() => rejectMutation.mutate(user.username)}
+                disabled={acceptMutation.isPending || rejectMutation.isPending}
+              >
+                Decline
+              </button>
+              <button
+                type="button"
                 className={styles.acceptButton}
                 onClick={() => acceptMutation.mutate(user.username)}
-                disabled={acceptMutation.isPending}
+                disabled={acceptMutation.isPending || rejectMutation.isPending}
               >
                 Accept
               </button>

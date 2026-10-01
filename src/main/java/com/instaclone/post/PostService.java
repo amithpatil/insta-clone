@@ -9,6 +9,7 @@ import com.instaclone.config.SearchProperties;
 import com.instaclone.config.StorageProperties;
 import com.instaclone.hashtag.Hashtag;
 import com.instaclone.hashtag.HashtagService;
+import com.instaclone.notification.NotificationRepository;
 import com.instaclone.search.SearchDocuments;
 import com.instaclone.search.SearchIndexEvent;
 import com.instaclone.social.comment.CommentRepository;
@@ -46,6 +47,7 @@ public class PostService {
     private final ApplicationEventPublisher eventPublisher;
     private final SearchProperties searchProperties;
     private final ModerationService moderationService;
+    private final NotificationRepository notificationRepository;
 
     public PostService(
             PostRepository postRepository,
@@ -59,7 +61,8 @@ public class PostService {
             HashtagService hashtagService,
             ApplicationEventPublisher eventPublisher,
             SearchProperties searchProperties,
-            ModerationService moderationService) {
+            ModerationService moderationService,
+            NotificationRepository notificationRepository) {
         this.postRepository = postRepository;
         this.mediaRepository = mediaRepository;
         this.userRepository = userRepository;
@@ -72,6 +75,7 @@ public class PostService {
         this.eventPublisher = eventPublisher;
         this.searchProperties = searchProperties;
         this.moderationService = moderationService;
+        this.notificationRepository = notificationRepository;
     }
 
     @Transactional
@@ -165,6 +169,7 @@ public class PostService {
             likeRepository.deleteByLikeableTypeAndLikeableIdIn(LikeableType.COMMENT, commentIds);
         }
         likeRepository.deleteByLikeableTypeAndLikeableId(LikeableType.POST, postId);
+        notificationRepository.deleteByTarget("POST", postId);
         postRepository.delete(post);
         eventPublisher.publishEvent(SearchIndexEvent.delete(searchProperties.postsIndex(), String.valueOf(postId)));
     }
@@ -199,11 +204,19 @@ public class PostService {
             throw new ForbiddenException("This account is private");
         }
 
+        // The owner viewing their own grid should see a still-transcoding or failed reel too —
+        // otherwise a freshly uploaded reel is invisible even to the person who just posted it.
+        boolean isOwnProfile = viewerId.equals(author.getId());
         Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
         List<Post> rows = decoded == null
-                ? postRepository.findFirstPageByUserId(author.getId(), limit + 1)
-                : postRepository.findPageByUserIdAfterCursor(
-                        author.getId(), decoded.createdAt(), decoded.id(), limit + 1);
+                ? (isOwnProfile
+                        ? postRepository.findFirstPageByUserIdIncludingPending(author.getId(), limit + 1)
+                        : postRepository.findFirstPageByUserId(author.getId(), limit + 1))
+                : (isOwnProfile
+                        ? postRepository.findPageByUserIdAfterCursorIncludingPending(
+                                author.getId(), decoded.createdAt(), decoded.id(), limit + 1)
+                        : postRepository.findPageByUserIdAfterCursor(
+                                author.getId(), decoded.createdAt(), decoded.id(), limit + 1));
 
         return toPage(rows, limit, viewerId);
     }

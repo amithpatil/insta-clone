@@ -64,6 +64,13 @@
   font-size: var(--font-size-sm);
 }
 
-.acceptButton:disabled {
+.declineButton {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+}
+
+.acceptButton:disabled,
+.declineButton:disabled {
   opacity: 0.5;
 }

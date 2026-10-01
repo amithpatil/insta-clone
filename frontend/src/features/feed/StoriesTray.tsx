@@ -7,12 +7,14 @@ import * as storiesApi from '@/lib/api/endpoints/stories'
 import { CreateStoryModal } from '@/features/stories/CreateStoryModal'
 import { StoryViewer } from '@/features/stories/StoryViewer'
 import { useStoriesFeed } from '@/features/stories/useStoriesFeed'
+import { useInfiniteScrollSentinel } from '@/lib/hooks/useInfiniteScrollSentinel'
 import { queryKeys } from '@/lib/queryKeys'
 import styles from './StoriesTray.module.css'
 
 export function StoriesTray() {
   const { user } = useAuth()
-  const { groups: otherGroups } = useStoriesFeed()
+  const { groups: otherGroups, hasNextPage, fetchNextPage, isFetchingNextPage } = useStoriesFeed()
+  const sentinelRef = useInfiniteScrollSentinel(() => fetchNextPage(), Boolean(hasNextPage) && !isFetchingNextPage)
   const [viewerGroupIndex, setViewerGroupIndex] = useState<number | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
 
@@ -62,11 +64,17 @@ export function StoriesTray() {
             type="button"
             onClick={() => setViewerGroupIndex(groups.findIndex((g) => g.author.id === group.author.id))}
           >
-            <Avatar src={group.author.profilePictureUrl} alt={group.author.username} size={56} storyRing="unseen" />
+            <Avatar
+              src={group.author.profilePictureUrl}
+              alt={group.author.username}
+              size={56}
+              storyRing={group.stories.every((s) => s.seenByViewer) ? 'seen' : 'unseen'}
+            />
           </button>
           <span className={styles.username}>{group.author.username}</span>
         </div>
       ))}
+      <div ref={sentinelRef} className={styles.sentinel} />
 
       {viewerGroupIndex !== null ? (
         <StoryViewer groups={groups} initialGroupIndex={viewerGroupIndex} onClose={() => setViewerGroupIndex(null)} />

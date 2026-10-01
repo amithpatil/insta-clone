@@ -14,6 +14,8 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
     @Query("select c.id from Comment c where c.post.id = :postId")
     List<Long> findIdsByPostId(@Param("postId") Long postId);
 
+    List<Comment> findByUserIdAndPostIdIn(Long userId, List<Long> postIds);
+
     @Query(
             value = "SELECT * FROM comments WHERE post_id = :postId ORDER BY created_at ASC, id ASC LIMIT :limit",
             nativeQuery = true)

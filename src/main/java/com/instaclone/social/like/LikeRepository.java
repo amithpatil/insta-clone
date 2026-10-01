@@ -14,6 +14,8 @@ public interface LikeRepository extends JpaRepository<Like, Long> {
 
     void deleteByLikeableTypeAndLikeableIdIn(LikeableType likeableType, List<Long> likeableIds);
 
+    void deleteByUserIdAndLikeableTypeAndLikeableId(Long userId, LikeableType likeableType, Long likeableId);
+
     @org.springframework.data.jpa.repository.Query(
             "select l.likeableId from Like l where l.user.id = :userId and l.likeableType = :type and l.likeableId in :ids")
     List<Long> findLikedIds(

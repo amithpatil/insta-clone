@@ -21,6 +21,7 @@ import com.instaclone.user.User;
 import com.instaclone.user.UserRepository;
 import com.instaclone.user.UserSummary;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -101,13 +102,13 @@ public class ReelService {
         return postService.toResponse(post, UserSummary.from(author), List.of(media), false, false);
     }
 
-    /** Follows-based, mirroring FeedService.getHomeFeed exactly but filtered to type=REEL + status=READY. */
+    /** Follows-based, mirroring FeedService.getHomeFeed exactly but filtered to type=REEL + status=READY.
+     * Always includes the viewer's own reels too — otherwise a user who just posted a reel would
+     * never see it in this feed at all, since they don't "follow" themselves. */
     @Transactional(readOnly = true)
     public CursorPage<PostResponse> getReelsFeed(Long viewerId, String cursor, int limit) {
-        List<Long> followedIds = followRepository.findAcceptedFolloweeIds(viewerId);
-        if (followedIds.isEmpty()) {
-            return new CursorPage<>(List.of(), null, false);
-        }
+        List<Long> followedIds = new ArrayList<>(followRepository.findAcceptedFolloweeIds(viewerId));
+        followedIds.add(viewerId);
 
         Cursor decoded = cursor == null ? null : Cursor.decode(cursor);
         List<Post> rows = decoded == null
