@@ -30,11 +30,25 @@
 		<java.version>25</java.version>
 		<awssdk.version>2.55.8</awssdk.version>
 		<springdoc.version>3.1.1</springdoc.version>
+		<bucket4j.version>8.20.0</bucket4j.version>
 	</properties>
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<!-- Bounded, access-expiring cache backing AuthRateLimitFilter's buckets — Bucket4j's own
+			     docs call this out as required for local/in-memory usage, since nothing else would
+			     ever free the memory for a (path, key) pair hit once and never again. -->
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+		</dependency>
+		<dependency>
+			<!-- In-memory token-bucket rate limiting for the auth endpoints (see AuthRateLimitFilter) -->
+			<groupId>com.bucket4j</groupId>
+			<artifactId>bucket4j_jdk17-core</artifactId>
+			<version>${bucket4j.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

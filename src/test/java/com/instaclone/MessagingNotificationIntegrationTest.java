@@ -2,6 +2,7 @@ package com.instaclone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.instaclone.auth.AuthRateLimitFilter;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,9 @@ import org.springframework.web.socket.sockjs.client.WebSocketTransport;
  * halves of each pipeline are verified independently, matching how Phase 2's async transcode
  * pipeline was verified both ways.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = AuthRateLimitFilter.ENABLED_PROPERTY + "=false")
 @AutoConfigureTestRestTemplate
 @Import(TestcontainersConfiguration.class)
 class MessagingNotificationIntegrationTest {

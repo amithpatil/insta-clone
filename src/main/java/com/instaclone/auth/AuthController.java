@@ -14,8 +14,17 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping(AuthController.BASE_PATH)
 public class AuthController {
+
+    // Referenced by AuthRateLimitFilter directly (same package) instead of being re-typed as
+    // separate string literals there, so a renamed route fails that file to compile instead of
+    // silently losing rate-limit protection.
+    static final String BASE_PATH = "/auth";
+    static final String REGISTER_PATH = "/register";
+    static final String LOGIN_PATH = "/login";
+    static final String FORGOT_PASSWORD_PATH = "/forgot-password";
+    static final String RESET_PASSWORD_PATH = "/reset-password";
 
     private static final String REFRESH_COOKIE_NAME = "refresh_token";
     private static final String REFRESH_COOKIE_PATH = "/api/v1/auth";
@@ -28,7 +37,7 @@ public class AuthController {
         this.jwtProperties = jwtProperties;
     }
 
-    @PostMapping("/register")
+    @PostMapping(REGISTER_PATH)
     @ResponseStatus(HttpStatus.CREATED)
     public AuthTokensResponse register(@Valid @RequestBody RegisterRequest request, HttpServletResponse response) {
         AuthResult result = authService.register(request);
@@ -36,7 +45,7 @@ public class AuthController {
         return result.tokens();
     }
 
-    @PostMapping("/login")
+    @PostMapping(LOGIN_PATH)
     public AuthTokensResponse login(@Valid @RequestBody LoginRequest request, HttpServletResponse response) {
         AuthResult result = authService.login(request);
         setRefreshCookie(response, result.refreshToken());
@@ -66,13 +75,13 @@ public class AuthController {
         clearRefreshCookie(response);
     }
 
-    @PostMapping("/forgot-password")
+    @PostMapping(FORGOT_PASSWORD_PATH)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         authService.forgotPassword(request);
     }
 
-    @PostMapping("/reset-password")
+    @PostMapping(RESET_PASSWORD_PATH)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         authService.resetPassword(request);

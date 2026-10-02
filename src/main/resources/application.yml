@@ -24,6 +24,11 @@ server:
     context-path: /api/v1
 
 app:
+  rate-limit:
+    auth:
+      # See AuthRateLimitFilter — disabled in the integration tests that register many accounts
+      # from the same host in one run.
+      enabled: true
   jwt:
     access-token-ttl: PT15M
     refresh-token-ttl: P30D

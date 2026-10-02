@@ -2,6 +2,7 @@ package com.instaclone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.instaclone.auth.AuthRateLimitFilter;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,9 @@ import org.springframework.http.ResponseEntity;
  * <p>TestRestTemplate's root URI already includes server.servlet.context-path (/api/v1), so
  * paths below are relative to that — not repeating the prefix.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = AuthRateLimitFilter.ENABLED_PROPERTY + "=false")
 @AutoConfigureTestRestTemplate
 @Import(TestcontainersConfiguration.class)
 class CoreSocialGraphIntegrationTest {

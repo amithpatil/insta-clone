@@ -2,6 +2,7 @@ package com.instaclone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.instaclone.auth.AuthRateLimitFilter;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +23,9 @@ import org.springframework.http.ResponseEntity;
  * disappears from the feed after that window. Hashtag parsing/browsing is covered too, including
  * the same "private accounts never leak into a discovery surface" rule explore/search both apply.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = AuthRateLimitFilter.ENABLED_PROPERTY + "=false")
 @AutoConfigureTestRestTemplate
 @Import(TestcontainersConfiguration.class)
 class HashtagStoryIntegrationTest {

@@ -2,6 +2,7 @@ package com.instaclone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.instaclone.auth.AuthRateLimitFilter;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +29,9 @@ import org.springframework.test.context.DynamicPropertySource;
  * pattern as ReelsExploreIntegrationTest's SeaweedFS container, since no official Testcontainers
  * Meilisearch module exists (checked on Maven Central).
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = AuthRateLimitFilter.ENABLED_PROPERTY + "=false")
 @AutoConfigureTestRestTemplate
 @Import(TestcontainersConfiguration.class)
 class SearchIntegrationTest {

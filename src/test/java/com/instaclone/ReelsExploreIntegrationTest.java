@@ -2,6 +2,7 @@ package com.instaclone;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.instaclone.auth.AuthRateLimitFilter;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -40,7 +41,9 @@ import org.springframework.test.context.DynamicPropertySource;
  * against a real (Testcontainers) SeaweedFS instance, since the async transcode worker genuinely
  * downloads the source object — a fake URL wouldn't exercise the real pipeline.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = AuthRateLimitFilter.ENABLED_PROPERTY + "=false")
 @AutoConfigureTestRestTemplate
 @Import(TestcontainersConfiguration.class)
 class ReelsExploreIntegrationTest {
