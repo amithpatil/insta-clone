@@ -4,8 +4,8 @@ import com.instaclone.common.BadRequestException;
 import com.instaclone.common.ConflictException;
 import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
+import com.instaclone.notification.FollowRequestNotificationCleaner;
 import com.instaclone.notification.NotificationEvent;
-import com.instaclone.notification.NotificationRepository;
 import com.instaclone.notification.NotificationType;
 import com.instaclone.social.moderation.ModerationService;
 import com.instaclone.user.User;
@@ -22,19 +22,19 @@ public class FollowService {
     private final UserRepository userRepository;
     private final ModerationService moderationService;
     private final ApplicationEventPublisher eventPublisher;
-    private final NotificationRepository notificationRepository;
+    private final FollowRequestNotificationCleaner followRequestNotifications;
 
     public FollowService(
             FollowRepository followRepository,
             UserRepository userRepository,
             ModerationService moderationService,
             ApplicationEventPublisher eventPublisher,
-            NotificationRepository notificationRepository) {
+            FollowRequestNotificationCleaner followRequestNotifications) {
         this.followRepository = followRepository;
         this.userRepository = userRepository;
         this.moderationService = moderationService;
         this.eventPublisher = eventPublisher;
-        this.notificationRepository = notificationRepository;
+        this.followRequestNotifications = followRequestNotifications;
     }
 
     @Transactional
@@ -78,7 +78,7 @@ public class FollowService {
             if (follow.getStatus() == FollowStatus.PENDING) {
                 // Withdrawing a request shouldn't leave the owner a "requested to follow you"
                 // notification that links to a requests list it's no longer in.
-                clearFollowRequestNotification(followee.getId(), followerId);
+                followRequestNotifications.clear(followee.getId(), followerId);
             }
         });
     }
@@ -103,6 +103,7 @@ public class FollowService {
                 .filter(f -> f.getStatus() == FollowStatus.PENDING)
                 .orElseThrow(() -> new NotFoundException("No pending follow request from this user"));
         follow.accept();
+        followRequestNotifications.clear(approverId, follower.getId());
 
         // Distinct from NotificationType.FOLLOW: the approver didn't follow the requester back
         // (no reciprocal Follow row is created here), they just approved an existing request.
@@ -120,10 +121,6 @@ public class FollowService {
                 .filter(f -> f.getStatus() == FollowStatus.PENDING)
                 .orElseThrow(() -> new NotFoundException("No pending follow request from this user"));
         followRepository.delete(follow);
-        clearFollowRequestNotification(approverId, follower.getId());
-    }
-
-    private void clearFollowRequestNotification(Long recipientId, Long actorId) {
-        notificationRepository.deleteByRecipientIdAndActorIdAndType(recipientId, actorId, NotificationType.FOLLOW_REQUEST);
+        followRequestNotifications.clear(approverId, follower.getId());
     }
 }

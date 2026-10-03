@@ -3,7 +3,14 @@ package com.instaclone;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.instaclone.auth.AuthRateLimitFilter;
+import com.instaclone.notification.Notification;
+import com.instaclone.notification.NotificationConsumer;
+import com.instaclone.notification.NotificationRepository;
+import com.instaclone.notification.NotificationType;
+import com.instaclone.user.User;
+import com.instaclone.user.UserRepository;
 import java.lang.reflect.Type;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -16,6 +23,8 @@ import org.springframework.boot.resttestclient.TestRestTemplate;
 import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -48,6 +57,15 @@ class MessagingNotificationIntegrationTest {
 
     @Autowired
     private TestRestTemplate rest;
+
+    @Autowired
+    private NotificationConsumer notificationConsumer;
+
+    @Autowired
+    private NotificationRepository notificationRepository;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Value("${local.server.port}")
     private int port;
@@ -183,6 +201,8 @@ class MessagingNotificationIntegrationTest {
         StompSession ownerSession = connect(ownerToken);
         BlockingQueue<Map> ownerNotifications = new ArrayBlockingQueue<>(10);
         ownerSession.subscribe("/user/queue/notifications", frameHandler(Map.class, ownerNotifications));
+        BlockingQueue<Map> ownerChanges = new ArrayBlockingQueue<>(10);
+        ownerSession.subscribe("/user/queue/notifications-changed", frameHandler(Map.class, ownerChanges));
 
         rest.exchange(
                 "/users/clr_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(cancellerToken)), Map.class);
@@ -197,12 +217,134 @@ class MessagingNotificationIntegrationTest {
         rest.exchange(
                 "/users/clr_owner/follow", HttpMethod.DELETE, new HttpEntity<>(null, bearer(cancellerToken)), Void.class);
         assertThat(notificationTypes(ownerToken)).containsExactly("FOLLOW_REQUEST");
+        assertThat(ownerChanges.poll(10, TimeUnit.SECONDS))
+                .as("the owner's open session is told a notification was removed, so its list/count update live")
+                .isNotNull();
 
         rest.exchange(
                 "/users/clr_declined/follow/reject", HttpMethod.DELETE, new HttpEntity<>(null, bearer(ownerToken)), Void.class);
         assertThat(notificationTypes(ownerToken)).isEmpty();
+        assertThat(ownerChanges.poll(10, TimeUnit.SECONDS)).isNotNull();
 
         ownerSession.disconnect();
+    }
+
+    @Test
+    void acceptingBlockingOrGoingPublicAlsoClearsTheOwnersRequestNotification() throws Exception {
+        String ownerToken = register("res_owner", "res_owner@example.com");
+        String acceptedToken = register("res_accepted", "res_accepted@example.com");
+        String blockedToken = register("res_blocked", "res_blocked@example.com");
+        String leftPendingToken = register("res_left", "res_left@example.com");
+        rest.exchange(
+                "/users/me", HttpMethod.PATCH, new HttpEntity<>(Map.of("isPrivate", true), bearer(ownerToken)), Map.class);
+
+        StompSession ownerSession = connect(ownerToken);
+        BlockingQueue<Map> ownerNotifications = new ArrayBlockingQueue<>(10);
+        ownerSession.subscribe("/user/queue/notifications", frameHandler(Map.class, ownerNotifications));
+        for (String requester : List.of(acceptedToken, blockedToken, leftPendingToken)) {
+            rest.exchange("/users/res_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(requester)), Map.class);
+        }
+        for (int i = 0; i < 3; i++) {
+            assertThat(ownerNotifications.poll(10, TimeUnit.SECONDS)).isNotNull();
+        }
+        assertThat(notificationTypes(ownerToken)).hasSize(3);
+
+        rest.exchange(
+                "/users/res_accepted/follow/accept", HttpMethod.POST, new HttpEntity<>(null, bearer(ownerToken)), Map.class);
+        assertThat(notificationTypes(ownerToken))
+                .as("accepting resolves that request, so its notification must not linger")
+                .hasSize(2);
+
+        rest.exchange("/users/res_blocked/block", HttpMethod.POST, new HttpEntity<>(null, bearer(ownerToken)), Void.class);
+        assertThat(notificationTypes(ownerToken))
+                .as("a block deletes the pending request, so it must not keep surfacing the blocked account")
+                .hasSize(1);
+
+        rest.exchange(
+                "/users/me", HttpMethod.PATCH, new HttpEntity<>(Map.of("isPrivate", false), bearer(ownerToken)), Map.class);
+        assertThat(notificationTypes(ownerToken))
+                .as("going public auto-accepts whatever was still pending")
+                .isEmpty();
+
+        ownerSession.disconnect();
+    }
+
+    // The notification row is written asynchronously (event -> Redis stream -> consumer), so a
+    // cancel can win the race and leave nothing to delete — the late event must then be dropped
+    // rather than creating a notification for a request that no longer exists. The race itself can't
+    // be forced deterministically over HTTP, so this feeds the consumer the event directly.
+    @Test
+    void aLateEventForAWithdrawnRequestIsDroppedAndAReplayedOneIsNotDuplicated() throws Exception {
+        String ownerToken = register("late_owner", "late_owner@example.com");
+        String requesterToken = register("late_requester", "late_requester@example.com");
+        rest.exchange(
+                "/users/me", HttpMethod.PATCH, new HttpEntity<>(Map.of("isPrivate", true), bearer(ownerToken)), Map.class);
+        long ownerId = ((Number) profileOf("late_owner", ownerToken).get("id")).longValue();
+        long requesterId = ((Number) profileOf("late_requester", requesterToken).get("id")).longValue();
+
+        notificationConsumer.onMessage(followRequestEvent(ownerId, requesterId));
+        assertThat(notificationTypes(ownerToken))
+                .as("no request is pending, so the late event must not create a notification")
+                .isEmpty();
+
+        rest.exchange(
+                "/users/late_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(requesterToken)), Map.class);
+        awaitNotificationCount(ownerToken, 1);
+        notificationConsumer.onMessage(followRequestEvent(ownerId, requesterId));
+        assertThat(notificationTypes(ownerToken))
+                .as("a redelivered/duplicate event must not add a second notification for the same request")
+                .containsExactly("FOLLOW_REQUEST");
+    }
+
+    // Guards the failure this class of bug produced before: a NotificationType added to the enum
+    // without widening the table's CHECK constraint / column length made every insert of it fail
+    // silently inside the stream consumer. Every value must be persistable, whatever it's called.
+    @Test
+    void everyNotificationTypeFitsTheNotificationsTable() {
+        String recipientToken = register("enum_recipient", "enum_recipient@example.com");
+        register("enum_actor", "enum_actor@example.com");
+        User recipient = userRepository.findByUsername("enum_recipient").orElseThrow();
+        User actor = userRepository.findByUsername("enum_actor").orElseThrow();
+
+        for (NotificationType type : NotificationType.values()) {
+            Notification notification = new Notification();
+            notification.setRecipient(recipient);
+            notification.setActor(actor);
+            notification.setType(type);
+            notification.setTargetType("USER");
+            notification.setTargetId(actor.getId());
+            notification.setCreatedAt(Instant.now());
+            notificationRepository.saveAndFlush(notification);
+        }
+
+        assertThat(notificationTypes(recipientToken))
+                .containsExactlyInAnyOrderElementsOf(
+                        java.util.Arrays.stream(NotificationType.values()).map(Enum::name).toList());
+    }
+
+    private MapRecord<String, String, String> followRequestEvent(long recipientId, long actorId) {
+        return MapRecord.create(
+                        "notifications-test",
+                        Map.of(
+                                "recipientId", String.valueOf(recipientId),
+                                "actorId", String.valueOf(actorId),
+                                "type", NotificationType.FOLLOW_REQUEST.name(),
+                                "targetType", "USER",
+                                "targetId", String.valueOf(actorId)))
+                .withId(RecordId.of("0-1"));
+    }
+
+    private Map profileOf(String username, String viewerToken) {
+        return rest.exchange("/users/" + username, HttpMethod.GET, new HttpEntity<>(bearer(viewerToken)), Map.class)
+                .getBody();
+    }
+
+    private void awaitNotificationCount(String token, int expected) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (notificationTypes(token).size() < expected && System.currentTimeMillis() < deadline) {
+            Thread.sleep(100);
+        }
+        assertThat(notificationTypes(token)).hasSize(expected);
     }
 
     private List<String> notificationTypes(String token) {

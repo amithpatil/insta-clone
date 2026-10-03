@@ -20,10 +20,29 @@ export function registerHandlers(stomp: Client, queryClient: QueryClient) {
   stomp.subscribe('/user/queue/notifications', (frame: IMessage) => {
     const notification = JSON.parse(frame.body) as Notification
     prependToFirstPage(queryClient, queryKeys.notifications(), notification)
-    // Keeps the "Follow Requests (N)" count on the owner's profile live instead of stale until reload.
+    // Whatever a follow-related notification implies is now stale elsewhere in the cache would
+    // otherwise only refresh on the next focus/remount, so refresh it as it arrives.
     if (notification.type === 'FOLLOW_REQUEST') {
+      // The owner's "Follow Requests (N)" count.
       queryClient.invalidateQueries({ queryKey: queryKeys.followRequests() })
+    } else if (notification.type === 'FOLLOW_REQUEST_ACCEPTED') {
+      // The actor is the account that accepted: the requester's cached view of it still says
+      // "Requested", and its posts and stories now belong in their feed.
+      queryClient.invalidateQueries({ queryKey: queryKeys.userProfile(notification.actor.username), exact: true })
+      queryClient.invalidateQueries({ queryKey: queryKeys.feed() })
+      queryClient.invalidateQueries({ queryKey: queryKeys.storiesFeed() })
+    } else if (notification.type === 'FOLLOW') {
+      // The recipient's own follower count — there's no user in scope here to target their profile
+      // key precisely, and only user queries currently on screen refetch.
+      queryClient.invalidateQueries({ queryKey: queryKeys.users() })
     }
+  })
+
+  // The server deleted a notification (a request was cancelled/declined/accepted/blocked) — nothing
+  // to patch, so refetch the list, the unread dot derived from it, and the request count.
+  stomp.subscribe('/user/queue/notifications-changed', () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.notifications() })
+    queryClient.invalidateQueries({ queryKey: queryKeys.followRequests() })
   })
 
   stomp.subscribe('/user/queue/messages', (frame: IMessage) => {

@@ -30,7 +30,18 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("update Notification n set n.read = true where n.id = :id and n.recipient.id = :recipientId")
     int markRead(@Param("id") Long id, @Param("recipientId") Long recipientId);
 
-    void deleteByRecipientIdAndActorIdAndType(Long recipientId, Long actorId, NotificationType type);
+    // Bulk JPQL like deleteByTarget below — a derived delete would SELECT every matching row and
+    // then DELETE them one by one.
+    @Modifying
+    @Query("delete from Notification n where n.recipient.id = :recipientId and n.actor.id = :actorId and n.type = :type")
+    void deleteByRecipientIdAndActorIdAndType(
+            @Param("recipientId") Long recipientId, @Param("actorId") Long actorId, @Param("type") NotificationType type);
+
+    @Modifying
+    @Query("delete from Notification n where n.recipient.id = :recipientId and n.type = :type")
+    void deleteByRecipientIdAndType(@Param("recipientId") Long recipientId, @Param("type") NotificationType type);
+
+    boolean existsByRecipientIdAndActorIdAndType(Long recipientId, Long actorId, NotificationType type);
 
     @Modifying
     @Query("delete from Notification n where n.targetType = :targetType and n.targetId = :targetId")

@@ -35,10 +35,6 @@ export function getFollowers(username: string, cursor?: string, limit?: number) 
   )
 }
 
-export function removeFollower(username: string) {
-  return apiFetch<void>(`/users/me/followers/${encodeURIComponent(username)}`, { method: 'DELETE' })
-}
-
 export function getFollowing(username: string, cursor?: string, limit?: number) {
   return apiFetch<CursorPage<UserSummary>>(
     `/users/${encodeURIComponent(username)}/following${buildQuery({ cursor, limit })}`,

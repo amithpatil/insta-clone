@@ -36,8 +36,7 @@ public class NotificationConsumer implements StreamListener<String, MapRecord<St
         Map<String, String> body = message.getValue();
         try {
             // Delegates to a separate bean so its @Transactional actually applies — see NotificationWriter's Javadoc.
-            Notification notification = notificationWriter.createNotification(body);
-            pushLive(notification);
+            notificationWriter.createNotification(body).ifPresent(this::pushLive);
         } catch (Exception e) {
             log.error("Failed to process notification event {}", body, e);
         } finally {

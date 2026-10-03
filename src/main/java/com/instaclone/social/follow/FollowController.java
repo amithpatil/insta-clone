@@ -42,4 +42,13 @@ public class FollowController {
     public void rejectFollowRequest(@PathVariable String username, @AuthenticationPrincipal Jwt jwt) {
         followService.rejectFollowRequest(SecurityUtils.currentUserId(jwt), username);
     }
+
+    // Like accept/reject: {username} is the OTHER account, and the caller is the one being followed —
+    // so this removes {username} as the caller's follower (DELETE on the bare path is the reverse,
+    // the caller unfollowing {username}).
+    @DeleteMapping("/remove")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeFollower(@PathVariable String username, @AuthenticationPrincipal Jwt jwt) {
+        followService.removeFollower(SecurityUtils.currentUserId(jwt), username);
+    }
 }

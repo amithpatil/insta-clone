@@ -5,6 +5,7 @@ import com.instaclone.common.CursorPage;
 import com.instaclone.common.ForbiddenException;
 import com.instaclone.common.NotFoundException;
 import com.instaclone.config.SearchProperties;
+import com.instaclone.notification.FollowRequestNotificationCleaner;
 import com.instaclone.post.PostRepository;
 import com.instaclone.search.SearchDocuments;
 import com.instaclone.search.SearchIndexEvent;
@@ -29,6 +30,7 @@ public class UserService {
     private final ModerationService moderationService;
     private final ApplicationEventPublisher eventPublisher;
     private final SearchProperties searchProperties;
+    private final FollowRequestNotificationCleaner followRequestNotifications;
 
     public UserService(
             UserRepository userRepository,
@@ -37,7 +39,8 @@ public class UserService {
             ProfileVisibilityService profileVisibilityService,
             ModerationService moderationService,
             ApplicationEventPublisher eventPublisher,
-            SearchProperties searchProperties) {
+            SearchProperties searchProperties,
+            FollowRequestNotificationCleaner followRequestNotifications) {
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.postRepository = postRepository;
@@ -45,6 +48,7 @@ public class UserService {
         this.moderationService = moderationService;
         this.eventPublisher = eventPublisher;
         this.searchProperties = searchProperties;
+        this.followRequestNotifications = followRequestNotifications;
     }
 
     public User findByUsernameOrThrow(String username) {
@@ -102,6 +106,7 @@ public class UserService {
         // stranding the requesters on "Requested" forever.
         if (wasPrivate && !user.isPrivate()) {
             followRepository.acceptAllPendingForFollowee(user.getId());
+            followRequestNotifications.clearAll(user.getId());
         }
         return toProfileResponse(user, userId);
     }

@@ -2,6 +2,7 @@ package com.instaclone.social.moderation;
 
 import com.instaclone.common.BadRequestException;
 import com.instaclone.common.NotFoundException;
+import com.instaclone.notification.FollowRequestNotificationCleaner;
 import com.instaclone.post.PostRepository;
 import com.instaclone.social.comment.Comment;
 import com.instaclone.social.comment.CommentRepository;
@@ -27,6 +28,7 @@ public class ModerationService {
     private final PostRepository postRepository;
     private final LikeRepository likeRepository;
     private final CommentRepository commentRepository;
+    private final FollowRequestNotificationCleaner followRequestNotifications;
 
     public ModerationService(
             UserModerationRepository moderationRepository,
@@ -34,13 +36,15 @@ public class ModerationService {
             UserRepository userRepository,
             PostRepository postRepository,
             LikeRepository likeRepository,
-            CommentRepository commentRepository) {
+            CommentRepository commentRepository,
+            FollowRequestNotificationCleaner followRequestNotifications) {
         this.moderationRepository = moderationRepository;
         this.followRepository = followRepository;
         this.userRepository = userRepository;
         this.postRepository = postRepository;
         this.likeRepository = likeRepository;
         this.commentRepository = commentRepository;
+        this.followRequestNotifications = followRequestNotifications;
     }
 
     @Transactional
@@ -72,6 +76,10 @@ public class ModerationService {
         // posts into the blocker's home feed (FeedService.getHomeFeed is purely follow-based).
         followRepository.findByFollowerIdAndFolloweeId(actorId, target.getId()).ifPresent(followRepository::delete);
         followRepository.findByFollowerIdAndFolloweeId(target.getId(), actorId).ifPresent(followRepository::delete);
+        // A pending request deleted above must not leave a "requested to follow you" notification
+        // behind — after a block it would keep surfacing the blocked account.
+        followRequestNotifications.clear(actorId, target.getId());
+        followRequestNotifications.clear(target.getId(), actorId);
 
         // A block should retroactively clear pre-existing interactions too, not just gate future
         // ones — otherwise a like/comment made before the block stays visible to everyone forever.

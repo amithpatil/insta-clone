@@ -16,3 +16,8 @@ export function acceptFollowRequest(username: string) {
 export function rejectFollowRequest(username: string) {
   return apiFetch<void>(`/users/${encodeURIComponent(username)}/follow/reject`, { method: 'DELETE' })
 }
+
+/** Removes `username` as one of the caller's followers (the reverse of `unfollow`, which is the caller leaving `username`). */
+export function removeFollower(username: string) {
+  return apiFetch<void>(`/users/${encodeURIComponent(username)}/follow/remove`, { method: 'DELETE' })
+}

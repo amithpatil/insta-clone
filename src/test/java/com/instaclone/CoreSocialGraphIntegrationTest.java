@@ -90,7 +90,7 @@ class CoreSocialGraphIntegrationTest {
                 .isEqualTo(HttpStatus.OK);
 
         ResponseEntity<Void> removal = rest.exchange(
-                "/users/me/followers/rm_fan", HttpMethod.DELETE, new HttpEntity<>(null, bearer(ownerToken)), Void.class);
+                "/users/rm_fan/follow/remove", HttpMethod.DELETE, new HttpEntity<>(null, bearer(ownerToken)), Void.class);
         assertThat(removal.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 
         assertThat(profile("rm_owner", ownerToken).get("followerCount")).isEqualTo(0);
@@ -101,7 +101,7 @@ class CoreSocialGraphIntegrationTest {
                 .isEqualTo(HttpStatus.FORBIDDEN);
 
         assertThat(rest.exchange(
-                                "/users/me/followers/rm_fan",
+                                "/users/rm_fan/follow/remove",
                                 HttpMethod.DELETE,
                                 new HttpEntity<>(null, bearer(ownerToken)),
                                 Map.class)
@@ -121,13 +121,42 @@ class CoreSocialGraphIntegrationTest {
 
         // A still-PENDING request is declined via /follow/reject; "remove follower" is only for accepted ones.
         assertThat(rest.exchange(
-                                "/users/me/followers/rm_pending_req",
+                                "/users/rm_pending_req/follow/remove",
                                 HttpMethod.DELETE,
                                 new HttpEntity<>(null, bearer(ownerToken)),
                                 Map.class)
                         .getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(profile("rm_pending_owner", requesterToken).get("viewerRelationship")).isEqualTo("REQUESTED");
+    }
+
+    @Test
+    void removingOneFollowerLeavesOthersAndWorksOnPublicAccounts() {
+        String ownerToken = register("pub_owner", "pub_owner@example.com");
+        String removedToken = register("pub_removed", "pub_removed@example.com");
+        String keptToken = register("pub_kept", "pub_kept@example.com");
+        rest.exchange("/users/pub_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(removedToken)), Map.class);
+        rest.exchange("/users/pub_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(keptToken)), Map.class);
+        assertThat(profile("pub_owner", ownerToken).get("followerCount")).isEqualTo(2);
+
+        assertThat(rest.exchange(
+                                "/users/pub_removed/follow/remove",
+                                HttpMethod.DELETE,
+                                new HttpEntity<>(null, bearer(ownerToken)),
+                                Void.class)
+                        .getStatusCode())
+                .isEqualTo(HttpStatus.NO_CONTENT);
+
+        assertThat(profile("pub_owner", ownerToken).get("followerCount")).isEqualTo(1);
+        assertThat(profile("pub_owner", removedToken).get("viewerRelationship")).isEqualTo("NOT_FOLLOWING");
+        assertThat(profile("pub_owner", keptToken).get("viewerRelationship"))
+                .as("removing one follower must not touch the others")
+                .isEqualTo("FOLLOWING");
+
+        // A public account can't lock anyone out — the removed user is free to follow again.
+        ResponseEntity<Map> refollow = rest.exchange(
+                "/users/pub_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(removedToken)), Map.class);
+        assertThat(refollow.getBody().get("status")).isEqualTo("ACCEPTED");
     }
 
     private Map profile(String username, String viewerToken) {
