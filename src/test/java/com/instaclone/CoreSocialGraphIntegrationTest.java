@@ -73,6 +73,68 @@ class CoreSocialGraphIntegrationTest {
         assertThat(((Number) postDetail.getBody().get("commentCount")).intValue()).isEqualTo(1);
     }
 
+    @Test
+    void removingAFollowerSeversTheRelationshipAndRevokesPrivateAccess() {
+        String ownerToken = register("rm_owner", "rm_owner@example.com");
+        String fanToken = register("rm_fan", "rm_fan@example.com");
+        rest.exchange(
+                "/users/me", HttpMethod.PATCH, new HttpEntity<>(Map.of("isPrivate", true), bearer(ownerToken)), Map.class);
+
+        rest.exchange("/users/rm_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(fanToken)), Map.class);
+        rest.exchange(
+                "/users/rm_fan/follow/accept", HttpMethod.POST, new HttpEntity<>(null, bearer(ownerToken)), Map.class);
+        assertThat(profile("rm_owner", ownerToken).get("followerCount")).isEqualTo(1);
+        assertThat(rest.exchange("/users/rm_owner/posts", HttpMethod.GET, new HttpEntity<>(bearer(fanToken)), Map.class)
+                        .getStatusCode())
+                .as("an accepted follower can see a private account's posts")
+                .isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<Void> removal = rest.exchange(
+                "/users/me/followers/rm_fan", HttpMethod.DELETE, new HttpEntity<>(null, bearer(ownerToken)), Void.class);
+        assertThat(removal.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        assertThat(profile("rm_owner", ownerToken).get("followerCount")).isEqualTo(0);
+        assertThat(profile("rm_owner", fanToken).get("viewerRelationship")).isEqualTo("NOT_FOLLOWING");
+        assertThat(rest.exchange("/users/rm_owner/posts", HttpMethod.GET, new HttpEntity<>(bearer(fanToken)), Map.class)
+                        .getStatusCode())
+                .as("a removed follower loses access to a private account")
+                .isEqualTo(HttpStatus.FORBIDDEN);
+
+        assertThat(rest.exchange(
+                                "/users/me/followers/rm_fan",
+                                HttpMethod.DELETE,
+                                new HttpEntity<>(null, bearer(ownerToken)),
+                                Map.class)
+                        .getStatusCode())
+                .as("removing someone who isn't (or is no longer) a follower is a 404, not a silent success")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void aPendingRequesterIsNotAFollowerToRemove() {
+        String ownerToken = register("rm_pending_owner", "rm_pending_owner@example.com");
+        String requesterToken = register("rm_pending_req", "rm_pending_req@example.com");
+        rest.exchange(
+                "/users/me", HttpMethod.PATCH, new HttpEntity<>(Map.of("isPrivate", true), bearer(ownerToken)), Map.class);
+        rest.exchange(
+                "/users/rm_pending_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(requesterToken)), Map.class);
+
+        // A still-PENDING request is declined via /follow/reject; "remove follower" is only for accepted ones.
+        assertThat(rest.exchange(
+                                "/users/me/followers/rm_pending_req",
+                                HttpMethod.DELETE,
+                                new HttpEntity<>(null, bearer(ownerToken)),
+                                Map.class)
+                        .getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(profile("rm_pending_owner", requesterToken).get("viewerRelationship")).isEqualTo("REQUESTED");
+    }
+
+    private Map profile(String username, String viewerToken) {
+        return rest.exchange("/users/" + username, HttpMethod.GET, new HttpEntity<>(bearer(viewerToken)), Map.class)
+                .getBody();
+    }
+
     private String register(String username, String email) {
         Map<String, Object> body = Map.of("username", username, "email", email, "password", "password123");
         ResponseEntity<Map> response = rest.postForEntity("/auth/register", body, Map.class);

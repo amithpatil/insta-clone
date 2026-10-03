@@ -129,6 +129,89 @@ class MessagingNotificationIntegrationTest {
         bobSession.disconnect();
     }
 
+    // Regression test: FOLLOW_REQUEST / FOLLOW_REQUEST_ACCEPTED were added to the Java enum without
+    // widening the notifications table's CHECK constraint, so the consumer's insert failed (caught,
+    // logged, and ACKed) and a private account's owner never saw a notification at all — while
+    // every other test stayed green, since none of them exercised this path.
+    @Test
+    void followRequestAndItsAcceptanceNotifyBothPartiesLiveAndDurably() throws Exception {
+        String ownerToken = register("req_owner", "req_owner@example.com");
+        String requesterToken = register("req_requester", "req_requester@example.com");
+        rest.exchange(
+                "/users/me", HttpMethod.PATCH, new HttpEntity<>(Map.of("isPrivate", true), bearer(ownerToken)), Map.class);
+
+        StompSession ownerSession = connect(ownerToken);
+        BlockingQueue<Map> ownerNotifications = new ArrayBlockingQueue<>(10);
+        ownerSession.subscribe("/user/queue/notifications", frameHandler(Map.class, ownerNotifications));
+        StompSession requesterSession = connect(requesterToken);
+        BlockingQueue<Map> requesterNotifications = new ArrayBlockingQueue<>(10);
+        requesterSession.subscribe("/user/queue/notifications", frameHandler(Map.class, requesterNotifications));
+
+        ResponseEntity<Map> followResponse = rest.exchange(
+                "/users/req_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(requesterToken)), Map.class);
+        assertThat(followResponse.getBody().get("status")).isEqualTo("PENDING");
+
+        Map requestNotification = ownerNotifications.poll(10, TimeUnit.SECONDS);
+        assertThat(requestNotification)
+                .as("the private account's owner should be notified live of an incoming follow request")
+                .isNotNull();
+        assertThat(requestNotification.get("type")).isEqualTo("FOLLOW_REQUEST");
+        assertThat(((Map) requestNotification.get("actor")).get("username")).isEqualTo("req_requester");
+        assertThat(notificationTypes(ownerToken)).contains("FOLLOW_REQUEST");
+
+        rest.exchange(
+                "/users/req_requester/follow/accept", HttpMethod.POST, new HttpEntity<>(null, bearer(ownerToken)), Map.class);
+
+        Map acceptedNotification = requesterNotifications.poll(10, TimeUnit.SECONDS);
+        assertThat(acceptedNotification).as("the requester should hear that their request was accepted").isNotNull();
+        assertThat(acceptedNotification.get("type")).isEqualTo("FOLLOW_REQUEST_ACCEPTED");
+        assertThat(((Map) acceptedNotification.get("actor")).get("username")).isEqualTo("req_owner");
+        assertThat(notificationTypes(requesterToken)).contains("FOLLOW_REQUEST_ACCEPTED");
+
+        ownerSession.disconnect();
+        requesterSession.disconnect();
+    }
+
+    @Test
+    void cancellingOrDecliningAPendingRequestClearsTheOwnersNotification() throws Exception {
+        String ownerToken = register("clr_owner", "clr_owner@example.com");
+        String cancellerToken = register("clr_canceller", "clr_canceller@example.com");
+        String declinedToken = register("clr_declined", "clr_declined@example.com");
+        rest.exchange(
+                "/users/me", HttpMethod.PATCH, new HttpEntity<>(Map.of("isPrivate", true), bearer(ownerToken)), Map.class);
+
+        StompSession ownerSession = connect(ownerToken);
+        BlockingQueue<Map> ownerNotifications = new ArrayBlockingQueue<>(10);
+        ownerSession.subscribe("/user/queue/notifications", frameHandler(Map.class, ownerNotifications));
+
+        rest.exchange(
+                "/users/clr_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(cancellerToken)), Map.class);
+        rest.exchange(
+                "/users/clr_owner/follow", HttpMethod.POST, new HttpEntity<>(null, bearer(declinedToken)), Map.class);
+        // The notification row is written asynchronously via the Redis stream — wait until both have
+        // actually landed (the live push only fires after the row is saved) before clearing them.
+        assertThat(ownerNotifications.poll(10, TimeUnit.SECONDS)).isNotNull();
+        assertThat(ownerNotifications.poll(10, TimeUnit.SECONDS)).isNotNull();
+        assertThat(notificationTypes(ownerToken)).containsExactly("FOLLOW_REQUEST", "FOLLOW_REQUEST");
+
+        rest.exchange(
+                "/users/clr_owner/follow", HttpMethod.DELETE, new HttpEntity<>(null, bearer(cancellerToken)), Void.class);
+        assertThat(notificationTypes(ownerToken)).containsExactly("FOLLOW_REQUEST");
+
+        rest.exchange(
+                "/users/clr_declined/follow/reject", HttpMethod.DELETE, new HttpEntity<>(null, bearer(ownerToken)), Void.class);
+        assertThat(notificationTypes(ownerToken)).isEmpty();
+
+        ownerSession.disconnect();
+    }
+
+    private List<String> notificationTypes(String token) {
+        ResponseEntity<Map> response =
+                rest.exchange("/notifications", HttpMethod.GET, new HttpEntity<>(bearer(token)), Map.class);
+        List<Map<String, Object>> items = (List<Map<String, Object>>) response.getBody().get("items");
+        return items.stream().map(n -> (String) n.get("type")).toList();
+    }
+
     private StompSession connect(String token) throws Exception {
         List<Transport> transports = List.of(new WebSocketTransport(new StandardWebSocketClient()));
         WebSocketStompClient stompClient = new WebSocketStompClient(new SockJsClient(transports));

@@ -20,6 +20,10 @@ export function registerHandlers(stomp: Client, queryClient: QueryClient) {
   stomp.subscribe('/user/queue/notifications', (frame: IMessage) => {
     const notification = JSON.parse(frame.body) as Notification
     prependToFirstPage(queryClient, queryKeys.notifications(), notification)
+    // Keeps the "Follow Requests (N)" count on the owner's profile live instead of stale until reload.
+    if (notification.type === 'FOLLOW_REQUEST') {
+      queryClient.invalidateQueries({ queryKey: queryKeys.followRequests() })
+    }
   })
 
   stomp.subscribe('/user/queue/messages', (frame: IMessage) => {

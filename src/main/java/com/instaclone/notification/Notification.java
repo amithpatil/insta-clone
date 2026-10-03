@@ -37,7 +37,7 @@ public class Notification {
     private User actor;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 30)
     private NotificationType type;
 
     @Column(name = "target_type", nullable = false, length = 20)
